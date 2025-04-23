@@ -1,5 +1,15 @@
-import { mat4 } from "gl-matrix";
+import { mat4, vec3 } from "gl-matrix";
+import { clamp } from "lodash-es";
 import { useEffect, useRef } from "react";
+import {
+  fromEvent,
+  map,
+  merge,
+  Observable,
+  Subscription,
+  switchMap,
+  takeUntil,
+} from "rxjs";
 
 export default function ColoredTriangle() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -64,7 +74,7 @@ export default function ColoredTriangle() {
     gl.useProgram(program);
 
     // 定义带有颜色信息的三角形顶点数据
-    const len = 400.0;
+    const len = 100.0;
 
     // prettier-ignore
     const positionsAndColors = [
@@ -80,13 +90,13 @@ export default function ColoredTriangle() {
     gl.bufferData(
       gl.ARRAY_BUFFER,
       new Float32Array(positionsAndColors),
-      gl.STATIC_DRAW
+      gl.STATIC_DRAW,
     );
 
     // 获取位置属性位置并启用
     const positionAttributeLocation = gl.getAttribLocation(
       program,
-      "a_position"
+      "a_position",
     );
     gl.enableVertexAttribArray(positionAttributeLocation);
     gl.vertexAttribPointer(
@@ -95,7 +105,7 @@ export default function ColoredTriangle() {
       gl.FLOAT,
       false,
       6 * Float32Array.BYTES_PER_ELEMENT,
-      0
+      0,
     );
 
     // 获取颜色属性位置并启用
@@ -107,27 +117,145 @@ export default function ColoredTriangle() {
       gl.FLOAT,
       false,
       6 * Float32Array.BYTES_PER_ELEMENT,
-      2 * Float32Array.BYTES_PER_ELEMENT
+      2 * Float32Array.BYTES_PER_ELEMENT,
     );
 
-    const mvpLocation = gl.getUniformLocation(program, "u_mvp");
+    const mvpUniformLocation = gl.getUniformLocation(program, "u_mvp");
 
-    const projectionMatrix = mat4.create();
+    const projMatrix = mat4.create();
     const viewMatrix = mat4.create();
-    const modelMatrix = mat4.create();
+    const mvpMatrix = mat4.create();
 
-    const tick = () => {
-      requestAnimationFrame(tick);
+    // RxJS 处理鼠标事件
+    const mouseDown$ = fromEvent<MouseEvent>(canvas, "mousedown");
+    // 绑定事件到 document 实现浏览器窗口外拖动
+    const mouseMove$ = fromEvent<MouseEvent>(document, "mousemove");
+    const mouseUp$ = fromEvent<MouseEvent>(document, "mouseup");
+    const mouseWheel$ = fromEvent<WheelEvent>(canvas, "wheel");
 
-      const mvpMatrix = mat4.create();
+    const drag$ = mouseDown$.pipe(
+      switchMap((startEvent) => {
+        let lastX = startEvent.clientX;
+        let lastY = startEvent.clientY;
 
+        return mouseMove$.pipe(
+          map((moveEvent) => {
+            const dx = moveEvent.clientX - lastX;
+            const dy = moveEvent.clientY - lastY;
+
+            lastX = moveEvent.clientX;
+            lastY = moveEvent.clientY;
+
+            return { dx, dy };
+          }),
+          takeUntil(mouseUp$),
+        );
+      }),
+    );
+
+    const zoom$ = mouseWheel$.pipe(
+      map((event) => {
+        event.preventDefault();
+
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+
+        const deltaY = event.deltaY;
+
+        return { mouseX, mouseY, deltaY };
+      }),
+    );
+
+    const subscription = new Subscription();
+
+    subscription.add(
+      drag$.subscribe(({ dx, dy }) => {
+        const moveVec = vec3.fromValues(dx, dy, 0);
+        const inverted = mat4.invert(mat4.create(), viewMatrix);
+        mat4.translate(inverted, inverted, vec3.negate(vec3.create(), moveVec));
+        mat4.invert(viewMatrix, inverted);
+      }),
+    );
+
+    subscription.add(
+      zoom$.subscribe(({ mouseX, mouseY, deltaY }) => {
+        const mousePos = vec3.fromValues(mouseX, mouseY, 0);
+        const inverted = mat4.invert(mat4.create(), viewMatrix);
+        vec3.transformMat4(mousePos, mousePos, inverted);
+
+        const delta = clamp(1.0 + deltaY / 1000, 0.5, 2.0);
+
+        mat4.translate(viewMatrix, viewMatrix, mousePos);
+        mat4.scale(viewMatrix, viewMatrix, vec3.fromValues(delta, delta, 1));
+        mat4.translate(
+          viewMatrix,
+          viewMatrix,
+          vec3.negate(vec3.create(), mousePos),
+        );
+      }),
+    );
+
+    const resize$ = new Observable<{ width: number; height: number }>(
+      (subscribe) => {
+        // 处理窗口大小变化，比如拉伸窗口
+        const resizeObserver = new ResizeObserver((entries) => {
+          requestAnimationFrame(() => {
+            const { width, height } = entries[0].contentRect;
+            subscribe.next({ width, height });
+          });
+        });
+        resizeObserver.observe(container);
+
+        // 处理设备像素比变化，比如从一个高分辨率屏幕切换到一个低分辨率屏幕
+        let remove: Function | null = null;
+        const onPixelRatioChange = () => {
+          remove?.();
+
+          const query = `(resolution: ${devicePixelRatio}dppx)`;
+          const media = matchMedia(query);
+
+          media.addEventListener("change", onPixelRatioChange);
+          remove = () => {
+            media.removeEventListener("change", onPixelRatioChange);
+            remove = null;
+          };
+
+          const { width, height } = container.getBoundingClientRect();
+          subscribe.next({ width, height });
+        };
+        onPixelRatioChange();
+
+        return () => {
+          resizeObserver.disconnect();
+          remove?.();
+        };
+      },
+    );
+
+    subscription.add(
+      resize$.subscribe(({ width, height }) => {
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+
+        canvas.width = width * devicePixelRatio;
+        canvas.height = height * devicePixelRatio;
+
+        gl.viewport(0, 0, canvas.width, canvas.height);
+
+        // 更新投影矩阵
+        mat4.ortho(projMatrix, 0, width, height, 0, -1, 1);
+      }),
+    );
+
+    const draw = () => {
       // 计算 MVP 矩阵
-      mat4.multiply(mvpMatrix, mvpMatrix, projectionMatrix);
+      mat4.identity(mvpMatrix);
+      mat4.multiply(mvpMatrix, mvpMatrix, projMatrix);
       mat4.multiply(mvpMatrix, mvpMatrix, viewMatrix);
-      mat4.multiply(mvpMatrix, mvpMatrix, modelMatrix);
 
       // 将 MVP 矩阵传递给着色器
-      gl.uniformMatrix4fv(mvpLocation, false, mvpMatrix);
+      gl.uniformMatrix4fv(mvpUniformLocation, false, mvpMatrix);
 
       // 清除画布
       gl.clearColor(1.0, 1.0, 1.0, 1.0);
@@ -136,51 +264,13 @@ export default function ColoredTriangle() {
       // 绘制三角形
       gl.drawArrays(gl.TRIANGLES, 0, 3);
     };
-    tick();
 
-    const resize = (width: number, height: number, ratio: number) => {
-      canvas.style.width = `${width}px`;
-      canvas.style.height = `${height}px`;
-
-      canvas.width = width * ratio;
-      canvas.height = height * ratio;
-
-      gl.viewport(0, 0, canvas.width, canvas.height);
-
-      // 更新投影矩阵
-      mat4.ortho(projectionMatrix, 0, width, height, 0, -1, 1);
-    };
-
-    // ------------------------------------------------------------------------------
-    // 处理窗口大小变化，比如拉伸窗口
-    const resizeObserver = new ResizeObserver((entries) => {
-      requestAnimationFrame(() => {
-        const { width, height } = entries[0].contentRect;
-        resize(width, height, devicePixelRatio);
-      });
-    });
-    resizeObserver.observe(container);
-
-    // 处理设备像素比变化，比如从一个高分辨率屏幕切换到一个低分辨率屏幕
-    let remove: () => void;
-    const onPixelRatioChange = () => {
-      remove?.();
-
-      const query = `(resolution: ${devicePixelRatio}dppx)`;
-      const media = matchMedia(query);
-
-      media.addEventListener("change", onPixelRatioChange);
-      remove = () => media.removeEventListener("change", onPixelRatioChange);
-
-      const { width, height } = container.getBoundingClientRect();
-      resize(width, height, devicePixelRatio);
-    };
-    onPixelRatioChange();
-    // ------------------------------------------------------------------------------
+    const draw$ = merge(drag$, zoom$, resize$);
+    subscription.add(draw$.subscribe(() => draw()));
 
     return () => {
-      resizeObserver.disconnect();
-      remove?.();
+      canvas.remove();
+      subscription.unsubscribe();
     };
   }, []);
 
