@@ -169,6 +169,9 @@ export default function ColoredTriangle() {
 
     const subscription = new Subscription();
 
+    // 视图矩阵：World -> Camera
+    // 相机矩阵：Camera -> World
+
     subscription.add(
       drag$.subscribe(({ dx, dy }) => {
         const moveVec = vec3.fromValues(dx, dy, 0);

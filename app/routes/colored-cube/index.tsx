@@ -1,6 +1,15 @@
 import { mat4, vec3 } from "gl-matrix";
+import { clamp } from "lodash-es";
 import { useEffect, useRef } from "react";
-import { Observable, Subscription } from "rxjs";
+import {
+  map,
+  merge,
+  fromEvent,
+  Observable,
+  Subscription,
+  switchMap,
+  takeUntil,
+} from "rxjs";
 
 export default function ColoredCube() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -70,15 +79,15 @@ export default function ColoredCube() {
     // prettier-ignore
     const positionsAndColors = [
       // 前表面
-      -size, -size,  size, 1.0, 0.0, 0.0, 1.0, // 左下前 红色
-       size, -size,  size, 0.0, 1.0, 0.0, 1.0, // 右下前 绿色
-       size,  size,  size, 0.0, 0.0, 1.0, 1.0, // 右上前 蓝色
-      -size,  size,  size, 1.0, 1.0, 0.0, 1.0, // 左上前 黄色
+      -size, -size,  size,  1.0, 0.0, 0.0, 1.0, // 左下前 红色
+       size, -size,  size,  0.0, 1.0, 0.0, 1.0, // 右下前 绿色
+       size,  size,  size,  0.0, 0.0, 1.0, 1.0, // 右上前 蓝色
+      -size,  size,  size,  1.0, 1.0, 0.0, 1.0, // 左上前 黄色
       // 后表面
-      -size, -size, -size, 1.0, 0.0, 1.0, 1.0, // 左下后 紫色
-       size, -size, -size, 0.0, 1.0, 1.0, 1.0, // 右下后 青色
-       size,  size, -size, 0.0, 0.0, 0.0, 1.0, // 右上后 白色
-      -size,  size, -size, 1.0, 1.0, 1.0, 1.0, // 左上后 黑色
+      -size, -size, -size,  1.0, 0.0, 1.0, 1.0, // 左下后 紫色
+       size, -size, -size,  0.0, 1.0, 1.0, 1.0, // 右下后 青色
+       size,  size, -size,  0.0, 0.0, 0.0, 1.0, // 右上后 白色
+      -size,  size, -size,  1.0, 1.0, 1.0, 1.0, // 左上后 黑色
     ];
 
     // prettier-ignore
@@ -102,7 +111,7 @@ export default function ColoredCube() {
     gl.bufferData(
       gl.ARRAY_BUFFER,
       new Float32Array(positionsAndColors),
-      gl.STATIC_DRAW
+      gl.STATIC_DRAW,
     );
 
     const indexBuffer = gl.createBuffer();
@@ -110,13 +119,13 @@ export default function ColoredCube() {
     gl.bufferData(
       gl.ELEMENT_ARRAY_BUFFER,
       new Uint16Array(indices),
-      gl.STATIC_DRAW
+      gl.STATIC_DRAW,
     );
 
     // 获取位置属性位置并启用
     const positionAttributeLocation = gl.getAttribLocation(
       program,
-      "a_position"
+      "a_position",
     );
     gl.enableVertexAttribArray(positionAttributeLocation);
     gl.vertexAttribPointer(
@@ -125,7 +134,7 @@ export default function ColoredCube() {
       gl.FLOAT,
       false,
       7 * Float32Array.BYTES_PER_ELEMENT,
-      0
+      0,
     );
 
     // 获取颜色属性位置并启用
@@ -137,7 +146,7 @@ export default function ColoredCube() {
       gl.FLOAT,
       false,
       7 * Float32Array.BYTES_PER_ELEMENT,
-      3 * Float32Array.BYTES_PER_ELEMENT
+      3 * Float32Array.BYTES_PER_ELEMENT,
     );
 
     const mvpUniformLocation = gl.getUniformLocation(program, "u_mvp");
@@ -146,7 +155,47 @@ export default function ColoredCube() {
     const viewMatrix = mat4.create();
     const mvpMatrix = mat4.create();
 
+    const mouseDown$ = fromEvent<MouseEvent>(canvas, "mousedown");
+    // 绑定事件到 document 实现浏览器窗口外拖动
+    const mouseMove$ = fromEvent<MouseEvent>(document, "mousemove");
+    const mouseUp$ = fromEvent<MouseEvent>(document, "mouseup");
+    const mouseWheel$ = fromEvent<WheelEvent>(canvas, "wheel");
+
     const subscription = new Subscription();
+
+    const drag$ = mouseDown$.pipe(
+      switchMap((startEvent) => {
+        let lastX = startEvent.clientX;
+        let lastY = startEvent.clientY;
+
+        return mouseMove$.pipe(
+          map((moveEvent) => {
+            const dx = moveEvent.clientX - lastX;
+            const dy = moveEvent.clientY - lastY;
+
+            lastX = moveEvent.clientX;
+            lastY = moveEvent.clientY;
+
+            return { dx, dy };
+          }),
+          takeUntil(mouseUp$),
+        );
+      }),
+    );
+
+    const zoom$ = mouseWheel$.pipe(
+      map((event) => {
+        event.preventDefault();
+
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = event.clientX - rect.left;
+        const mouseY = event.clientY - rect.top;
+
+        const deltaY = event.deltaY;
+
+        return { mouseX, mouseY, deltaY };
+      }),
+    );
 
     const resize$ = new Observable<{ width: number; height: number }>(
       (subscriber) => {
@@ -182,7 +231,77 @@ export default function ColoredCube() {
           resizeObserver.disconnect();
           remove?.();
         };
-      }
+      },
+    );
+
+    const ROTATE_SPEED = 0.005;
+    const ZOOM_SPEED = 0.001;
+
+    subscription.add(
+      drag$.subscribe(({ dx, dy }) => {
+        const deltaX = dx * ROTATE_SPEED;
+        const deltaY = dy * ROTATE_SPEED;
+
+        const inverted = mat4.invert(mat4.create(), viewMatrix);
+
+        const cameraPosition = vec3.fromValues(
+          inverted[12],
+          inverted[13],
+          inverted[14],
+        );
+
+        // 构造以目标点为原点的球坐标系
+        const spherical = vec3.create();
+        vec3.sub(spherical, cameraPosition, cameraTarget);
+        const radius = vec3.len(spherical);
+
+        let theta = Math.atan2(spherical[0], spherical[2]);
+        let phi = Math.acos(clamp(spherical[1] / radius, -1, 1));
+
+        theta -= deltaX;
+        phi -= deltaY;
+
+        phi = clamp(phi, 0.01 * Math.PI, 0.99 * Math.PI);
+
+        const newPosition = vec3.fromValues(
+          radius * Math.sin(phi) * Math.sin(theta),
+          radius * Math.cos(phi),
+          radius * Math.sin(phi) * Math.cos(theta),
+        );
+
+        vec3.add(cameraPosition, cameraTarget, newPosition);
+        mat4.lookAt(viewMatrix, cameraPosition, cameraTarget, cameraUp);
+      }),
+    );
+
+    subscription.add(
+      zoom$.subscribe(({ deltaY }) => {
+        const inverted = mat4.invert(mat4.create(), viewMatrix);
+
+        // 转换到相机矩阵，就能避免在世界坐标系中的旋转影响
+        // 视图矩阵的作用是将世界坐标系中的点转换到相机坐标系中
+
+        const cameraPosition = vec3.fromValues(
+          inverted[12],
+          inverted[13],
+          inverted[14],
+        );
+
+        const delta = clamp(1.0 + deltaY * ZOOM_SPEED, 0.5, 2.0);
+        vec3.scale(cameraPosition, cameraPosition, delta);
+
+        mat4.lookAt(viewMatrix, cameraPosition, cameraTarget, cameraUp);
+
+        // 有两种缩放实现方式：
+
+        // 1. 调整相机位置的远近
+        // Z 轴移动可以保持正确的透视缩短效果（近大远小）
+        // mat4.translate(viewMatrix, viewMatrix, vec3.fromValues(0, 0, -deltaY));
+
+        // 2. 调整相机的视野范围
+        // const delta = clamp(1.0 + deltaY / 1000, 0.5, 2.0);
+        // mat4.scale(viewMatrix, viewMatrix, vec3.fromValues(delta, delta, 1));
+      }),
     );
 
     subscription.add(
@@ -195,17 +314,12 @@ export default function ColoredCube() {
 
         gl.viewport(0, 0, canvas.width, canvas.height);
 
+        // viewport 会自动处理逻辑像素和物理像素的转换，投影矩阵不再需要处理 dpr
+
         // 更新投影矩阵
-        mat4.ortho(
-          projMatrix,
-          -width / 2,
-          width / 2,
-          -height / 2,
-          height / 2,
-          0.1,
-          1000
-        );
-      })
+        const aspect = width / height;
+        mat4.perspective(projMatrix, Math.PI / 4, aspect, 0.1, 1000);
+      }),
     );
 
     const cameraPosition = vec3.fromValues(0, 0, 500); // 相机位置
@@ -217,11 +331,6 @@ export default function ColoredCube() {
     gl.enable(gl.DEPTH_TEST);
 
     const draw = () => {
-      requestAnimationFrame(draw);
-
-      mat4.rotateY(viewMatrix, viewMatrix, 0.01);
-      mat4.rotateX(viewMatrix, viewMatrix, 0.01);
-
       // 计算 MVP 矩阵
       mat4.identity(mvpMatrix);
       mat4.multiply(mvpMatrix, mvpMatrix, projMatrix);
@@ -237,7 +346,9 @@ export default function ColoredCube() {
       // 绘制三角形
       gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
     };
-    draw();
+
+    const draw$ = merge(drag$, zoom$, resize$);
+    subscription.add(draw$.subscribe(() => draw()));
 
     return () => {
       canvas.remove();
