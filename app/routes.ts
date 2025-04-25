@@ -6,4 +6,8 @@ export default [
     path: "colored-triangle",
     file: "routes/colored-triangle/index.tsx",
   },
+  {
+    path: "colored-cube",
+    file: "routes/colored-cube/index.tsx",
+  },
 ] satisfies RouteConfig;

@@ -20,6 +20,9 @@ export default function Home() {
             <li>
               <Link to="/colored-triangle">Colored Triangle</Link>
             </li>
+            <li>
+              <Link to="/colored-cube">Colored Cube</Link>
+            </li>
           </ul>
         </div>
       </div>

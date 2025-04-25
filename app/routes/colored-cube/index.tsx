@@ -1,17 +1,8 @@
 import { mat4, vec3 } from "gl-matrix";
-import { clamp } from "lodash-es";
 import { useEffect, useRef } from "react";
-import {
-  fromEvent,
-  map,
-  merge,
-  Observable,
-  Subscription,
-  switchMap,
-  takeUntil,
-} from "rxjs";
+import { Observable, Subscription } from "rxjs";
 
-export default function ColoredTriangle() {
+export default function ColoredCube() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -32,13 +23,13 @@ export default function ColoredTriangle() {
 
     // 修改后的顶点着色器代码，加入颜色属性
     const vertexShaderSource = `
-      attribute vec2 a_position;
+      attribute vec3 a_position;
       attribute vec4 a_color;
       varying vec4 v_color;
       uniform mat4 u_mvp;
 
       void main() {
-        gl_Position = u_mvp * vec4(a_position, 0.0, 1.0);
+        gl_Position = u_mvp * vec4(a_position, 1.0);
         v_color = a_color;
       }
     `;
@@ -74,38 +65,67 @@ export default function ColoredTriangle() {
     gl.useProgram(program);
 
     // 定义带有颜色信息的三角形顶点数据
-    const len = 100.0;
+    const size = 50.0;
 
     // prettier-ignore
     const positionsAndColors = [
-      // 位置         颜色
-         0.0, 0.0,   1.0, 0.0, 0.0, 1.0, // 红色
-         0.0, len,   0.0, 1.0, 0.0, 1.0, // 绿色
-         len, 0.0,   0.0, 0.0, 1.0, 1.0, // 蓝色
+      // 前表面
+      -size, -size,  size, 1.0, 0.0, 0.0, 1.0, // 左下前 红色
+       size, -size,  size, 0.0, 1.0, 0.0, 1.0, // 右下前 绿色
+       size,  size,  size, 0.0, 0.0, 1.0, 1.0, // 右上前 蓝色
+      -size,  size,  size, 1.0, 1.0, 0.0, 1.0, // 左上前 黄色
+      // 后表面
+      -size, -size, -size, 1.0, 0.0, 1.0, 1.0, // 左下后 紫色
+       size, -size, -size, 0.0, 1.0, 1.0, 1.0, // 右下后 青色
+       size,  size, -size, 0.0, 0.0, 0.0, 1.0, // 右上后 白色
+      -size,  size, -size, 1.0, 1.0, 1.0, 1.0, // 左上后 黑色
     ];
 
-    // 创建缓冲区并绑定数据
+    // prettier-ignore
+    const indices = [
+      // 前表面
+      0, 1, 2,  0, 2, 3,
+      // 后表面
+      4, 5, 6,  4, 6, 7,
+      // 左表面
+      0, 3, 7,  0, 7, 4,
+      // 右表面
+      1, 5, 6,  1, 6, 2,
+      // 上表面
+      3, 2, 6,  3, 6, 7,
+      // 下表面
+      0, 4, 5,  0, 5, 1,
+    ];
+
     const positionAndColorBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionAndColorBuffer);
     gl.bufferData(
       gl.ARRAY_BUFFER,
       new Float32Array(positionsAndColors),
-      gl.STATIC_DRAW,
+      gl.STATIC_DRAW
+    );
+
+    const indexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+    gl.bufferData(
+      gl.ELEMENT_ARRAY_BUFFER,
+      new Uint16Array(indices),
+      gl.STATIC_DRAW
     );
 
     // 获取位置属性位置并启用
     const positionAttributeLocation = gl.getAttribLocation(
       program,
-      "a_position",
+      "a_position"
     );
     gl.enableVertexAttribArray(positionAttributeLocation);
     gl.vertexAttribPointer(
       positionAttributeLocation,
-      2,
+      3,
       gl.FLOAT,
       false,
-      6 * Float32Array.BYTES_PER_ELEMENT,
-      0,
+      7 * Float32Array.BYTES_PER_ELEMENT,
+      0
     );
 
     // 获取颜色属性位置并启用
@@ -116,8 +136,8 @@ export default function ColoredTriangle() {
       4,
       gl.FLOAT,
       false,
-      6 * Float32Array.BYTES_PER_ELEMENT,
-      2 * Float32Array.BYTES_PER_ELEMENT,
+      7 * Float32Array.BYTES_PER_ELEMENT,
+      3 * Float32Array.BYTES_PER_ELEMENT
     );
 
     const mvpUniformLocation = gl.getUniformLocation(program, "u_mvp");
@@ -126,75 +146,7 @@ export default function ColoredTriangle() {
     const viewMatrix = mat4.create();
     const mvpMatrix = mat4.create();
 
-    // RxJS 处理鼠标事件
-    const mouseDown$ = fromEvent<MouseEvent>(canvas, "mousedown");
-    // 绑定事件到 document 实现浏览器窗口外拖动
-    const mouseMove$ = fromEvent<MouseEvent>(document, "mousemove");
-    const mouseUp$ = fromEvent<MouseEvent>(document, "mouseup");
-    const mouseWheel$ = fromEvent<WheelEvent>(canvas, "wheel");
-
-    const drag$ = mouseDown$.pipe(
-      switchMap((startEvent) => {
-        let lastX = startEvent.clientX;
-        let lastY = startEvent.clientY;
-
-        return mouseMove$.pipe(
-          map((moveEvent) => {
-            const dx = moveEvent.clientX - lastX;
-            const dy = moveEvent.clientY - lastY;
-
-            lastX = moveEvent.clientX;
-            lastY = moveEvent.clientY;
-
-            return { dx, dy };
-          }),
-          takeUntil(mouseUp$),
-        );
-      }),
-    );
-
-    const zoom$ = mouseWheel$.pipe(
-      map((event) => {
-        event.preventDefault();
-
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = event.clientX - rect.left;
-        const mouseY = event.clientY - rect.top;
-
-        const deltaY = event.deltaY;
-
-        return { mouseX, mouseY, deltaY };
-      }),
-    );
-
     const subscription = new Subscription();
-
-    subscription.add(
-      drag$.subscribe(({ dx, dy }) => {
-        const moveVec = vec3.fromValues(dx, dy, 0);
-        const inverted = mat4.invert(mat4.create(), viewMatrix);
-        mat4.translate(inverted, inverted, vec3.negate(vec3.create(), moveVec));
-        mat4.invert(viewMatrix, inverted);
-      }),
-    );
-
-    subscription.add(
-      zoom$.subscribe(({ mouseX, mouseY, deltaY }) => {
-        const mousePos = vec3.fromValues(mouseX, mouseY, 0);
-        const inverted = mat4.invert(mat4.create(), viewMatrix);
-        vec3.transformMat4(mousePos, mousePos, inverted);
-
-        const delta = clamp(1.0 + deltaY / 1000, 0.5, 2.0);
-
-        mat4.translate(viewMatrix, viewMatrix, mousePos);
-        mat4.scale(viewMatrix, viewMatrix, vec3.fromValues(delta, delta, 1));
-        mat4.translate(
-          viewMatrix,
-          viewMatrix,
-          vec3.negate(vec3.create(), mousePos),
-        );
-      }),
-    );
 
     const resize$ = new Observable<{ width: number; height: number }>(
       (subscriber) => {
@@ -230,7 +182,7 @@ export default function ColoredTriangle() {
           resizeObserver.disconnect();
           remove?.();
         };
-      },
+      }
     );
 
     subscription.add(
@@ -244,11 +196,32 @@ export default function ColoredTriangle() {
         gl.viewport(0, 0, canvas.width, canvas.height);
 
         // 更新投影矩阵
-        mat4.ortho(projMatrix, 0, width, height, 0, -1, 1);
-      }),
+        mat4.ortho(
+          projMatrix,
+          -width / 2,
+          width / 2,
+          -height / 2,
+          height / 2,
+          0.1,
+          1000
+        );
+      })
     );
 
+    const cameraPosition = vec3.fromValues(0, 0, 500); // 相机位置
+    const cameraTarget = vec3.fromValues(0, 0, 0); // 观察目标点
+    const cameraUp = vec3.fromValues(0, 1, 0); // 上方向向量
+
+    mat4.lookAt(viewMatrix, cameraPosition, cameraTarget, cameraUp);
+
+    gl.enable(gl.DEPTH_TEST);
+
     const draw = () => {
+      requestAnimationFrame(draw);
+
+      mat4.rotateY(viewMatrix, viewMatrix, 0.01);
+      mat4.rotateX(viewMatrix, viewMatrix, 0.01);
+
       // 计算 MVP 矩阵
       mat4.identity(mvpMatrix);
       mat4.multiply(mvpMatrix, mvpMatrix, projMatrix);
@@ -259,14 +232,12 @@ export default function ColoredTriangle() {
 
       // 清除画布
       gl.clearColor(1.0, 1.0, 1.0, 1.0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
       // 绘制三角形
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
     };
-
-    const draw$ = merge(drag$, zoom$, resize$);
-    subscription.add(draw$.subscribe(() => draw()));
+    draw();
 
     return () => {
       canvas.remove();
