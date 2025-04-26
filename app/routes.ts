@@ -10,4 +10,8 @@ export default [
     path: "colored-cube",
     file: "routes/colored-cube/index.tsx",
   },
+  {
+    path: "path-triangulation",
+    file: "routes/path-triangulation/index.tsx",
+  },
 ] satisfies RouteConfig;

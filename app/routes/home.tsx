@@ -23,6 +23,9 @@ export default function Home() {
             <li>
               <Link to="/colored-cube">Colored Cube</Link>
             </li>
+            <li>
+              <Link to="/path-triangulation">Path Triangulation</Link>
+            </li>
           </ul>
         </div>
       </div>
