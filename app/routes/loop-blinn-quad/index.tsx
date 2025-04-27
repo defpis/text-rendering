@@ -12,10 +12,10 @@ import {
 } from "rxjs";
 import opentype from "opentype.js";
 import fontURL from "~/assets/fonts/LXGWWenKaiMono-Regular.ttf";
-import { pathToPoints } from "./pathToPoints";
-import { pointsToPolygons } from "./pointsToPolygons";
+import { pathToPolygons } from "./pathToPolygons";
+import { polygonToTriangles } from "./polygonToTriangles";
 
-export default function PathTriangulation() {
+export default function LoopBlinnQuad() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -33,24 +33,77 @@ export default function PathTriangulation() {
     });
     if (!gl) return;
 
-    const vertexShaderSource = `
-      attribute vec2 a_position;
-      attribute vec4 a_color;
-      varying vec4 v_color;
+    const vertexShaderSource = `#version 300 es
+      in vec2 a_position;
+      in float a_mode_bary;
+      in vec3 a_color;
+
+      flat out float v_mode;
+      out vec2 v_bary;
+      out vec3 v_color;
+
       uniform mat4 u_mvp;
 
       void main() {
         gl_Position = u_mvp * vec4(a_position, 0.0, 1.0);
         v_color = a_color;
+
+        uint mode_bary = uint(a_mode_bary);
+        v_mode = float((mode_bary >> 2) & 0x3u) - 1.0;
+        v_bary.x = float((mode_bary >> 1) & 0x1u);
+        v_bary.y = float((mode_bary >> 0) & 0x1u);
       }
     `;
 
-    const fragmentShaderSource = `
+    const fragmentShaderSource = `#version 300 es
       precision mediump float;
-      varying vec4 v_color;
+      flat in float v_mode;
+      in vec2 v_bary;
+      in vec3 v_color;
+
+      layout(location = 0) out vec4 fragColor;
 
       void main() {
-        gl_FragColor = v_color;
+        if ((v_mode < 0.5) && (v_mode > -0.5)) { // Solid triangles (mode == 1)
+          // Render solid color for the main triangle body
+          fragColor = vec4(v_color, 1.0);
+        } else { // Curve triangles (mode == 0 or 2)
+          // Map barycentric coordinates to quadratic curve's uv space
+          vec2 kln = v_bary;
+          vec2 uv = vec2(1.0, 1.0) * v_bary.x + vec2(0.5, 0.0) * v_bary.y;
+
+          vec2 px = dFdx(uv);
+          vec2 py = dFdy(uv);
+
+          // Calculate signed distance function F = u^2 - v
+          float F = uv.x * uv.x - uv.y;
+
+          // Calculate gradient magnitude squared |∇F|^2 = Fx^2 + Fy^2
+          // Fx = dF/dx = (∂F/∂u)*(∂u/∂x) + (∂F/∂v)*(∂v/∂x) = (2u)*px.x + (-1)*px.y
+          // Fy = dF/dy = (∂F/∂u)*(∂u/∂y) + (∂F/∂v)*(∂v/∂y) = (2u)*py.x + (-1)*py.y
+          float Fx = 2.0 * uv.x * px.x - px.y;
+          float Fy = 2.0 * uv.x * py.x - py.y;
+          float grad_sq = Fx * Fx + Fy * Fy;
+
+          // Approximate signed distance: sd ≈ F / |∇F|
+          float sd = F / sqrt(grad_sq);
+
+          // Determine curve direction sign (inner/outer)
+          float curve_sign = (v_mode < 0.0) ? -1.0 : 1.0; // mode 0 is inner (-1), mode 2 is outer (+1)
+
+          // Width of the smooth transition, related to pixel size
+          float width = fwidth(sd); // Approximate width based on distance change across pixels
+
+          // Center the smooth step around 0, with total width 2*width
+          float alpha = smoothstep(-width, width, -sd * curve_sign);
+
+          // Discard fully transparent pixels
+          if (alpha < 0.001) {
+              discard;
+          } else {
+              fragColor = vec4(v_color, alpha);
+          }
+        }
       }
     `;
 
@@ -58,29 +111,40 @@ export default function PathTriangulation() {
     if (!vertexShader) return;
     gl.shaderSource(vertexShader, vertexShaderSource);
     gl.compileShader(vertexShader);
+    // 在顶点着色器编译后添加
+    if (!gl.getShaderParameter(vertexShader, gl.COMPILE_STATUS)) {
+      console.error("顶点着色器编译错误:", gl.getShaderInfoLog(vertexShader));
+    }
 
     const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
     if (!fragmentShader) return;
     gl.shaderSource(fragmentShader, fragmentShaderSource);
     gl.compileShader(fragmentShader);
+    // 在片段着色器编译后添加
+    if (!gl.getShaderParameter(fragmentShader, gl.COMPILE_STATUS)) {
+      console.error("片段着色器编译错误:", gl.getShaderInfoLog(fragmentShader));
+    }
 
     const program = gl.createProgram();
     if (!program) return;
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
     gl.linkProgram(program);
+    // 在程序链接后添加
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.error("程序链接错误:", gl.getProgramInfoLog(program));
+    }
     gl.useProgram(program);
 
-    let positionsAndColors = [];
+    let positionsAndColors: number[] = [];
 
     const mvpUniformLocation = gl.getUniformLocation(program, "u_mvp");
-    const colorUniformLocation = gl.getUniformLocation(program, "u_color");
-
-    gl.uniform4fv(colorUniformLocation, [0.0, 0.0, 0.0, 1.0]);
 
     const projMatrix = mat4.create();
     const viewMatrix = mat4.create();
     const mvpMatrix = mat4.create();
+
+    const vertexLength = 6;
 
     const draw = () => {
       mat4.identity(mvpMatrix);
@@ -92,7 +156,7 @@ export default function PathTriangulation() {
       gl.clearColor(1.0, 1.0, 1.0, 1.0);
       gl.clear(gl.COLOR_BUFFER_BIT);
 
-      gl.drawArrays(gl.TRIANGLES, 0, positionsAndColors.length / 6);
+      gl.drawArrays(gl.TRIANGLES, 0, positionsAndColors.length / vertexLength);
     };
 
     const mouseDown$ = fromEvent<MouseEvent>(canvas, "mousedown");
@@ -223,31 +287,81 @@ export default function PathTriangulation() {
     opentype.load(fontURL).then((font) => {
       positionsAndColors = [];
 
-      const getColor = () =>
-        Array.from({ length: 3 }, () => Math.random()).concat(1.0);
+      const getColor = () => Array.from({ length: 3 }, () => Math.random());
+      const packed = (mode: number, baryX: number, baryY: number) =>
+        (mode << 2) | (baryX << 1) | baryY;
+
+      /*
+      > X-Y
+      B(0,1)
+        |\
+        | \
+        |  \
+        |###\
+        |----\
+      A(1,0) C(0,0)
+
+      > U-V
+        A(1,1)
+        |\
+        | \
+        |# \
+        |#  \
+        |----\
+      C(0,0) B(1,0)
+      */
 
       for (const glyph of font.stringToGlyphs(text)) {
         const path = glyph.getPath(offsetX, offsetY, fontSize);
         offsetX += ((glyph.advanceWidth || 0) / 1000) * fontSize;
-        const pointsGroups = pathToPoints(path.toPathData(3), 0.99);
-        const charPolygons = pointsToPolygons(pointsGroups);
+        const { polygons, outterQuads, innerQuads } = pathToPolygons(path);
+        const triangles = polygonToTriangles(polygons);
 
-        for (const polygon of charPolygons) {
-          for (const { p1, p2, p3 } of polygon) {
+        // prettier-ignore
+        triangles.forEach(({ p1, p2, p3 }) => {
+          positionsAndColors.push(
+            p1.x, p1.y, packed(1, 0, 0), ...getColor(),
+            p2.x, p2.y, packed(1, 0, 0), ...getColor(),
+            p3.x, p3.y, packed(1, 0, 0), ...getColor()
+          );
+        });
+
+        // prettier-ignore
+        outterQuads.forEach(({ p1, p2, p3 }) => {
             positionsAndColors.push(
-              p1[0],
-              p1[1],
-              ...getColor(),
-              p2[0],
-              p2[1],
-              ...getColor(),
-              p3[0],
-              p3[1],
-              ...getColor(),
+              p1.x, p1.y, packed(2, 1, 0), ...getColor(),
+              p2.x, p2.y, packed(2, 0, 1), ...getColor(),
+              p3.x, p3.y, packed(2, 0, 0), ...getColor()
             );
-          }
-        }
+          });
+
+        // prettier-ignore
+        innerQuads.forEach(({ p1, p2, p3 }) => {
+            positionsAndColors.push(
+              p1.x, p1.y, packed(0, 1, 0), ...getColor(),
+              p2.x, p2.y, packed(0, 0, 1), ...getColor(),
+              p3.x, p3.y, packed(0, 0, 0), ...getColor()
+            );
+          });
       }
+
+      // prettier-ignore
+      // positionsAndColors = [
+      //   // inner
+      //   100,   0, packed(0, 1, 0), ...getColor(),
+      //   0,     0, packed(0, 0, 1), ...getColor(),
+      //   0,   100, packed(0, 0, 0), ...getColor(),
+
+      //   // soild
+      //   200,   0, packed(1, 0, 0), ...getColor(),
+      //   100,   0, packed(1, 0, 0), ...getColor(),
+      //   100, 100, packed(1, 0, 0), ...getColor(),
+
+      //   // outer
+      //   300,   0, packed(2, 1, 0), ...getColor(),
+      //   200,   0, packed(2, 0, 1), ...getColor(),
+      //   200, 100, packed(2, 0, 0), ...getColor(),
+      // ];
 
       const positionAndColorBuffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, positionAndColorBuffer);
@@ -267,19 +381,33 @@ export default function PathTriangulation() {
         2,
         gl.FLOAT,
         false,
-        6 * Float32Array.BYTES_PER_ELEMENT,
+        vertexLength * Float32Array.BYTES_PER_ELEMENT,
         0,
+      );
+
+      const modeAttributeLocation = gl.getAttribLocation(
+        program,
+        "a_mode_bary",
+      );
+      gl.enableVertexAttribArray(modeAttributeLocation);
+      gl.vertexAttribPointer(
+        modeAttributeLocation,
+        1,
+        gl.FLOAT,
+        false,
+        vertexLength * Float32Array.BYTES_PER_ELEMENT,
+        2 * Float32Array.BYTES_PER_ELEMENT,
       );
 
       const colorAttributeLocation = gl.getAttribLocation(program, "a_color");
       gl.enableVertexAttribArray(colorAttributeLocation);
       gl.vertexAttribPointer(
         colorAttributeLocation,
-        4,
+        3,
         gl.FLOAT,
         false,
-        6 * Float32Array.BYTES_PER_ELEMENT,
-        2 * Float32Array.BYTES_PER_ELEMENT,
+        vertexLength * Float32Array.BYTES_PER_ELEMENT,
+        3 * Float32Array.BYTES_PER_ELEMENT,
       );
 
       draw();

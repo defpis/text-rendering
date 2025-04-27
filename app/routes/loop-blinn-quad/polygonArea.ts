@@ -1,7 +1,6 @@
-import type { vec2 } from "gl-matrix";
-import { determinant2 } from "./utils";
+import { determinant2, type Point } from "./utils";
 
-export const polygonAreaSigned = (points: Array<vec2>): number => {
+export const polygonAreaSigned = (points: Array<Point>): number => {
   if (points.length < 3) {
     return 0;
   }

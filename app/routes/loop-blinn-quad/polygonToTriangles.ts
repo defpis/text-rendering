@@ -1,25 +1,23 @@
 import earcut from "earcut";
-
-import { inside } from "./utils";
+import { inside, type Point } from "./utils";
 import { polygonAreaSigned } from "./polygonArea";
-import { vec2 } from "gl-matrix";
 
 export interface Triangle {
-  p1: vec2;
-  p2: vec2;
-  p3: vec2;
+  p1: Point;
+  p2: Point;
+  p3: Point;
 }
 
 interface Group {
-  points: Array<vec2>;
+  points: Array<Point>;
   area: number;
   children: Array<Group>;
 }
 
-export const pointsToPolygons = (
-  points: Array<Array<vec2>>,
-): Array<Array<Triangle>> => {
-  const groups: Array<Group> = points.map((pointsArr) => ({
+export const polygonToTriangles = (
+  polygons: Array<Array<Point>>,
+): Array<Triangle> => {
+  const groups: Array<Group> = polygons.map((pointsArr) => ({
     points: pointsArr,
     area: polygonAreaSigned(pointsArr),
     children: [],
@@ -47,7 +45,6 @@ export const pointsToPolygons = (
     }
   }
 
-  const polygons: Array<Array<Triangle>> = [];
   let triangles: Array<Triangle> = [];
 
   const process = (group: Group) => {
@@ -55,42 +52,38 @@ export const pointsToPolygons = (
     const holes: number[] = [];
 
     group.points.forEach((point) => {
-      coords.push(...point);
+      coords.push(point.x, point.y);
     });
 
     group.children.forEach((child) => {
       child.children.forEach(process);
       holes.push(coords.length / 2);
       child.points.forEach((point) => {
-        coords.push(...point);
+        coords.push(point.x, point.y);
       });
     });
 
     const indices = earcut(coords, holes);
 
     for (let i = 0; i < indices.length; i += 3) {
-      const p1 = vec2.fromValues(
-        coords[indices[i + 0] * 2],
-        coords[indices[i + 0] * 2 + 1],
-      );
-      const p2 = vec2.fromValues(
-        coords[indices[i + 1] * 2],
-        coords[indices[i + 1] * 2 + 1],
-      );
-      const p3 = vec2.fromValues(
-        coords[indices[i + 2] * 2],
-        coords[indices[i + 2] * 2 + 1],
-      );
+      const p1 = {
+        x: coords[indices[i + 0] * 2],
+        y: coords[indices[i + 0] * 2 + 1],
+      };
+      const p2 = {
+        x: coords[indices[i + 1] * 2],
+        y: coords[indices[i + 1] * 2 + 1],
+      };
+      const p3 = {
+        x: coords[indices[i + 2] * 2],
+        y: coords[indices[i + 2] * 2 + 1],
+      };
 
       triangles.push({ p1, p2, p3 });
     }
   };
 
-  root.forEach((group) => {
-    process(group);
-    polygons.push(triangles);
-    triangles = [];
-  });
+  root.forEach(process);
 
-  return polygons;
+  return triangles;
 };

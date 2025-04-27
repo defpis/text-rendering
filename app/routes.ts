@@ -14,4 +14,8 @@ export default [
     path: "path-triangulation",
     file: "routes/path-triangulation/index.tsx",
   },
+  {
+    path: "loop-blinn-quad",
+    file: "routes/loop-blinn-quad/index.tsx",
+  },
 ] satisfies RouteConfig;
