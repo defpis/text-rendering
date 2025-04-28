@@ -64,44 +64,29 @@ export default function LoopBlinnQuad() {
       layout(location = 0) out vec4 fragColor;
 
       void main() {
-        if ((v_mode < 0.5) && (v_mode > -0.5)) { // Solid triangles (mode == 1)
-          // Render solid color for the main triangle body
+        if ((v_mode < 0.5) && (v_mode > -0.5)) {
           fragColor = vec4(v_color, 1.0);
-        } else { // Curve triangles (mode == 0 or 2)
-          // Map barycentric coordinates to quadratic curve's uv space
-          vec2 kln = v_bary;
+        } else {
           vec2 uv = vec2(1.0, 1.0) * v_bary.x + vec2(0.5, 0.0) * v_bary.y;
 
           vec2 px = dFdx(uv);
           vec2 py = dFdy(uv);
 
-          // Calculate signed distance function F = u^2 - v
-          float F = uv.x * uv.x - uv.y;
+          float f = uv.x * uv.x - uv.y;
 
-          // Calculate gradient magnitude squared |∇F|^2 = Fx^2 + Fy^2
-          // Fx = dF/dx = (∂F/∂u)*(∂u/∂x) + (∂F/∂v)*(∂v/∂x) = (2u)*px.x + (-1)*px.y
-          // Fy = dF/dy = (∂F/∂u)*(∂u/∂y) + (∂F/∂v)*(∂v/∂y) = (2u)*py.x + (-1)*py.y
-          float Fx = 2.0 * uv.x * px.x - px.y;
-          float Fy = 2.0 * uv.x * py.x - py.y;
-          float grad_sq = Fx * Fx + Fy * Fy;
+          float fx = 2.0 * uv.x * px.x - px.y;
+          float fy = 2.0 * uv.x * py.x - py.y;
 
-          // Approximate signed distance: sd ≈ F / |∇F|
-          float sd = F / sqrt(grad_sq);
+          float sd = f / sqrt(fx * fx + fy * fy);
+          float s = v_mode > 0.0 ? -1.0 : 1.0;
 
-          // Determine curve direction sign (inner/outer)
-          float curve_sign = (v_mode < 0.0) ? -1.0 : 1.0; // mode 0 is inner (-1), mode 2 is outer (+1)
+          float w = fwidth(sd);
+          float a = smoothstep(-w, w, sd * s);
 
-          // Width of the smooth transition, related to pixel size
-          float width = fwidth(sd); // Approximate width based on distance change across pixels
-
-          // Center the smooth step around 0, with total width 2*width
-          float alpha = smoothstep(-width, width, -sd * curve_sign);
-
-          // Discard fully transparent pixels
-          if (alpha < 0.001) {
-              discard;
+          if (a < 0.001) {
+            discard;
           } else {
-              fragColor = vec4(v_color, alpha);
+            fragColor = vec4(v_color, a);
           }
         }
       }
@@ -314,7 +299,7 @@ export default function LoopBlinnQuad() {
       for (const glyph of font.stringToGlyphs(text)) {
         const path = glyph.getPath(offsetX, offsetY, fontSize);
         offsetX += ((glyph.advanceWidth || 0) / 1000) * fontSize;
-        const { polygons, outterQuads, innerQuads } = pathToPolygons(path);
+        const { polygons, outerQuads, innerQuads } = pathToPolygons(path);
         const triangles = polygonToTriangles(polygons);
 
         // prettier-ignore
@@ -322,27 +307,27 @@ export default function LoopBlinnQuad() {
           positionsAndColors.push(
             p1.x, p1.y, packed(1, 0, 0), ...getColor(),
             p2.x, p2.y, packed(1, 0, 0), ...getColor(),
-            p3.x, p3.y, packed(1, 0, 0), ...getColor()
+            p3.x, p3.y, packed(1, 0, 0), ...getColor(),
           );
         });
 
         // prettier-ignore
-        outterQuads.forEach(({ p1, p2, p3 }) => {
-            positionsAndColors.push(
-              p1.x, p1.y, packed(2, 1, 0), ...getColor(),
-              p2.x, p2.y, packed(2, 0, 1), ...getColor(),
-              p3.x, p3.y, packed(2, 0, 0), ...getColor()
-            );
-          });
+        outerQuads.forEach(({ p1, p2, p3 }) => {
+          positionsAndColors.push(
+            p1.x, p1.y, packed(2, 1, 0), ...getColor(),
+            p2.x, p2.y, packed(2, 0, 1), ...getColor(),
+            p3.x, p3.y, packed(2, 0, 0), ...getColor(),
+          );
+        });
 
         // prettier-ignore
         innerQuads.forEach(({ p1, p2, p3 }) => {
-            positionsAndColors.push(
-              p1.x, p1.y, packed(0, 1, 0), ...getColor(),
-              p2.x, p2.y, packed(0, 0, 1), ...getColor(),
-              p3.x, p3.y, packed(0, 0, 0), ...getColor()
-            );
-          });
+          positionsAndColors.push(
+            p1.x, p1.y, packed(0, 1, 0), ...getColor(),
+            p2.x, p2.y, packed(0, 0, 1), ...getColor(),
+            p3.x, p3.y, packed(0, 0, 0), ...getColor(),
+          );
+        });
       }
 
       // prettier-ignore

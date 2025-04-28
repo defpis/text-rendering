@@ -1,4 +1,4 @@
-export const EPSILON = 0.000001;
+export const EPSILON = 1e-6;
 
 export interface Point {
   x: number;
@@ -37,12 +37,11 @@ export const inside = (points: Point[], p: Point) => {
   let curr = points[points.length - 1];
 
   points.forEach((next) => {
-    const p1 = curr.y < next.y ? curr : next;
-    const p2 = curr.y < next.y ? next : curr;
+    const [p1, p2] = curr.y < next.y ? [curr, next] : [next, curr];
 
-    if (p1.y < p.y + EPSILON && p2.y > p.y + EPSILON) {
-      const v1 = sub(p2, p1);
-      const v2 = sub(p, p1);
+    if (p.y > p1.y - EPSILON && p.y < p2.y + EPSILON) {
+      const v1 = sub(p1, p);
+      const v2 = sub(p2, p1);
 
       if (determinant2(v1, v2) > 0) {
         count += 1;

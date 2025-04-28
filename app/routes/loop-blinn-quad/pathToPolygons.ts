@@ -1,24 +1,40 @@
-import { clone, determinant2, equals, sub, type Point } from "./utils";
-import { insideQuad, splitQuad } from "./quadBezier";
-import { flatten, isArray } from "lodash-es";
+import { determinant2, equals, sub, type Point } from "./utils";
+import {
+  insideQuad,
+  splitQuad,
+  type NestPoints,
+  type QuadBezier,
+  type QuadBezierResult,
+} from "./quadBezier";
+import { isArray } from "lodash-es";
 
-export interface QuadBezier {
-  p1: Point;
-  p2: Point;
-  p3: Point;
-}
+const flattenPolygon = (polygon: NestPoints): Point[] => {
+  const result: Point[] = [];
+  polygon.forEach((points) =>
+    isArray(points)
+      ? result.push(...flattenPolygon(points))
+      : result.push(points),
+  );
+  return result;
+};
 
-export interface QuadBezierResult extends QuadBezier {
-  points: Point[];
-  quads?: QuadBezier[];
-}
+const flattenQuad = (quads: QuadBezierResult[]): QuadBezier[] => {
+  const result: QuadBezier[] = [];
+  quads.forEach((quad) =>
+    isArray(quad.quads)
+      ? result.push(...flattenQuad(quad.quads))
+      : result.push(quad),
+  );
+  return result;
+};
 
 export const pathToPolygons = (path: opentype.Path) => {
-  let _polygons: Array<Array<Point | Point[]>> = [];
-  let _innerQuads: QuadBezierResult[] = [];
-  let _outterQuads: QuadBezierResult[] = [];
+  const _polygons: NestPoints[] = [];
 
-  let currentPolygon: Array<Point | Point[]> = [];
+  const _innerQuads: QuadBezierResult[] = [];
+  const _outerQuads: QuadBezierResult[] = [];
+
+  let currentPolygon: NestPoints = [];
   let currentPoint = { x: 0, y: 0 };
 
   while (path.commands.length) {
@@ -34,13 +50,12 @@ export const pathToPolygons = (path: opentype.Path) => {
         }
 
         currentPolygon.push(nextPoint);
-        currentPoint = clone(nextPoint);
+        currentPoint = nextPoint;
         break;
       }
       case "Z":
         const firstPoint = currentPolygon[0];
-        if (isArray(firstPoint)) continue;
-        currentPolygon.push(clone(firstPoint));
+        currentPolygon.push(firstPoint);
         _polygons.push(currentPolygon);
         currentPolygon = [];
         currentPoint = { x: 0, y: 0 };
@@ -54,7 +69,7 @@ export const pathToPolygons = (path: opentype.Path) => {
         const areaSigned = determinant2(v1, v2);
 
         const quad: QuadBezierResult = {
-          points: [], // 占位后续修改
+          points: [],
           p1: currentPoint,
           p2: ctrlPoint,
           p3: nextPoint,
@@ -64,12 +79,12 @@ export const pathToPolygons = (path: opentype.Path) => {
           quad.points.push(ctrlPoint);
           _innerQuads.push(quad);
         } else {
-          _outterQuads.push(quad);
+          _outerQuads.push(quad);
         }
 
         currentPolygon.push(quad.points);
         currentPolygon.push(nextPoint);
-        currentPoint = clone(nextPoint);
+        currentPoint = nextPoint;
         break;
       }
       case "C": {
@@ -82,32 +97,51 @@ export const pathToPolygons = (path: opentype.Path) => {
     _polygons.push(currentPolygon);
   }
 
-  const overlaps = [];
-  for (const outterQuad of _outterQuads) {
-    for (const innerQuad of _innerQuads) {
-      if (insideQuad(outterQuad, innerQuad.p2)) {
-        overlaps.push({ innerQuad, outterQuad });
+  let outers = _outerQuads;
+  let inners = _innerQuads;
 
-        const [q1, q2] = splitQuad(outterQuad, 0.5);
-        outterQuad.points.push(q1.p3);
-        outterQuad.quads = [q1, q2];
+  let loop = 0; // 处理三次覆盖 99.99% 的字符
+  while (loop < 3) {
+    loop++;
 
-        const [q3, q4] = splitQuad(innerQuad, 0.5);
-        innerQuad.points.splice(0, 1, q3.p2, q3.p3, q4.p2);
-        innerQuad.quads = [q3, q4];
+    const _outers = [];
+    const _inners = [];
+
+    for (const outer of outers) {
+      for (const inner of inners) {
+        if (insideQuad(outer, inner.p2)) {
+          const [q1, q2] = splitQuad(outer, 0.5);
+
+          // 修改引用并预留空数组以便下一层修改引用
+          outer.points.push(q1.points, q1.p3, q2.points);
+          outer.quads = [q1, q2];
+
+          const [q3, q4] = splitQuad(inner, 0.5);
+
+          // 推入控制点
+          q3.points.push(q3.p2);
+          q4.points.push(q4.p2);
+
+          // 删除之前插入的控制点，插入新的轮廓点
+          inner.points.splice(0, 1, q3.points, q3.p3, q4.points);
+          inner.quads = [q3, q4];
+
+          _outers.push(q1, q2);
+          _inners.push(q3, q4);
+        }
       }
     }
+
+    if (!_outers.length || !_inners.length) break;
+
+    outers = _outers;
+    inners = _inners;
   }
 
-  const polygons = _polygons.map((polygon) =>
-    flatten(polygon.map((point) => (isArray(point) ? point : [point]))),
-  );
-  const outterQuads = flatten(
-    _outterQuads.map((quad) => (quad.quads ? quad.quads : [quad])),
-  );
-  const innerQuads = flatten(
-    _innerQuads.map((quad) => (quad.quads ? quad.quads : [quad])),
-  );
+  const polygons = _polygons.map((polygon) => flattenPolygon(polygon));
 
-  return { polygons, outterQuads, innerQuads };
+  const outerQuads = flattenQuad(_outerQuads);
+  const innerQuads = flattenQuad(_innerQuads);
+
+  return { polygons, outerQuads, innerQuads };
 };
