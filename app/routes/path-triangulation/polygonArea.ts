@@ -1,5 +1,5 @@
 import type { vec2 } from "gl-matrix";
-import { determinant2 } from "./utils";
+import { cross } from "./utils";
 
 export const polygonAreaSigned = (points: Array<vec2>): number => {
   if (points.length < 3) {
@@ -10,10 +10,10 @@ export const polygonAreaSigned = (points: Array<vec2>): number => {
   let area = 0;
 
   for (let i = 0; i < lastIndex; i++) {
-    area += determinant2(points[i], points[i + 1]);
+    area += cross(points[i], points[i + 1]);
   }
 
-  area += determinant2(points[lastIndex], points[0]);
+  area += cross(points[lastIndex], points[0]);
 
   return area / 2;
 };

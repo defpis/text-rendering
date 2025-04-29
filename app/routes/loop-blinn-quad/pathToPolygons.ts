@@ -1,4 +1,4 @@
-import { determinant2, equals, sub, type Point } from "./utils";
+import { cross, equals, sub, type Point } from "./utils";
 import {
   insideQuad,
   splitQuad,
@@ -66,7 +66,7 @@ export const pathToPolygons = (path: opentype.Path) => {
 
         const v1 = sub(ctrlPoint, currentPoint);
         const v2 = sub(nextPoint, ctrlPoint);
-        const areaSigned = determinant2(v1, v2);
+        const areaSigned = cross(v1, v2);
 
         const quad: QuadBezierResult = {
           points: [],

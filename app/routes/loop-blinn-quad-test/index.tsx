@@ -1,30 +1,26 @@
-import { mat4, vec3 } from "gl-matrix";
-import { clamp } from "lodash-es";
+import { mat4 } from "gl-matrix";
+import { toNumber } from "lodash-es";
 import { useEffect, useRef } from "react";
 import {
   fromEvent,
   map,
-  merge,
   Observable,
   Subscription,
   switchMap,
   takeUntil,
+  merge,
+  EMPTY,
 } from "rxjs";
-import opentype from "opentype.js";
-import fontURL from "~/assets/fonts/LXGWWenKaiMono-Regular.ttf";
-import { pathToPolygons } from "./pathToPolygons";
-import { polygonToTriangles } from "./polygonToTriangles";
 
-export default function LoopBlinnQuad() {
+export default function LoopBlinnQuadTest() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const canvas = document.createElement("canvas");
-    canvas.style.display = "block";
-    container.appendChild(canvas);
+    const canvas = container.querySelector("canvas")!;
+    const svg = container.querySelector("svg")!;
 
     const gl = canvas.getContext("webgl2", {
       antialias: true,
@@ -146,13 +142,10 @@ export default function LoopBlinnQuad() {
       0,
     );
 
-    const modeBaryAttributeLocation = gl.getAttribLocation(
-      program,
-      "a_mode_bary",
-    );
-    gl.enableVertexAttribArray(modeBaryAttributeLocation);
+    const modeAttributeLocation = gl.getAttribLocation(program, "a_mode_bary");
+    gl.enableVertexAttribArray(modeAttributeLocation);
     gl.vertexAttribPointer(
-      modeBaryAttributeLocation,
+      modeAttributeLocation,
       1,
       gl.FLOAT,
       false,
@@ -177,60 +170,11 @@ export default function LoopBlinnQuad() {
     const viewMatrix = mat4.create();
     const mvpMatrix = mat4.create();
 
-    const draw = () => {
-      mat4.identity(mvpMatrix);
-      mat4.multiply(mvpMatrix, mvpMatrix, projMatrix);
-      mat4.multiply(mvpMatrix, mvpMatrix, viewMatrix);
-
-      gl.uniformMatrix4fv(mvpUniformLocation, false, mvpMatrix);
-
-      gl.clearColor(1.0, 1.0, 1.0, 1.0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-
-      gl.drawArrays(gl.TRIANGLES, 0, positionsAndColors.length / vertexLength);
-    };
-
-    const mouseDown$ = fromEvent<MouseEvent>(canvas, "mousedown");
-    const mouseMove$ = fromEvent<MouseEvent>(document, "mousemove");
-    const mouseUp$ = fromEvent<MouseEvent>(document, "mouseup");
-    const mouseWheel$ = fromEvent<WheelEvent>(canvas, "wheel");
-
-    const drag$ = mouseDown$.pipe(
-      switchMap((startEvent) => {
-        let lastX = startEvent.clientX;
-        let lastY = startEvent.clientY;
-
-        return mouseMove$.pipe(
-          map((moveEvent) => {
-            const dx = moveEvent.clientX - lastX;
-            const dy = moveEvent.clientY - lastY;
-
-            lastX = moveEvent.clientX;
-            lastY = moveEvent.clientY;
-
-            return { dx, dy };
-          }),
-          takeUntil(mouseUp$),
-        );
-      }),
-    );
-
-    const zoom$ = mouseWheel$.pipe(
-      map((event) => {
-        event.preventDefault();
-
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = event.clientX - rect.left;
-        const mouseY = event.clientY - rect.top;
-
-        const deltaY = event.deltaY;
-
-        return { mouseX, mouseY, deltaY };
-      }),
-    );
+    const subscription = new Subscription();
 
     const resize$ = new Observable<{ width: number; height: number }>(
       (subscriber) => {
+        // 处理窗口大小变化，比如拉伸窗口
         const resizeObserver = new ResizeObserver((entries) => {
           requestAnimationFrame(() => {
             const { width, height } = entries[0].contentRect;
@@ -239,6 +183,7 @@ export default function LoopBlinnQuad() {
         });
         resizeObserver.observe(container);
 
+        // 处理设备像素比变化，比如从一个高分辨率屏幕切换到一个低分辨率屏幕
         let remove: Function | null = null;
         const onPixelRatioChange = () => {
           remove?.();
@@ -264,37 +209,6 @@ export default function LoopBlinnQuad() {
       },
     );
 
-    const draw$ = merge(drag$, zoom$, resize$);
-
-    const subscription = new Subscription();
-
-    subscription.add(
-      drag$.subscribe(({ dx, dy }) => {
-        const moveVec = vec3.fromValues(dx, dy, 0);
-        const inverted = mat4.invert(mat4.create(), viewMatrix);
-        mat4.translate(inverted, inverted, vec3.negate(vec3.create(), moveVec));
-        mat4.invert(viewMatrix, inverted);
-      }),
-    );
-
-    subscription.add(
-      zoom$.subscribe(({ mouseX, mouseY, deltaY }) => {
-        const mousePos = vec3.fromValues(mouseX, mouseY, 0);
-        const inverted = mat4.invert(mat4.create(), viewMatrix);
-        vec3.transformMat4(mousePos, mousePos, inverted);
-
-        const delta = clamp(1.0 + deltaY / 1000, 0.5, 2.0);
-
-        mat4.translate(viewMatrix, viewMatrix, mousePos);
-        mat4.scale(viewMatrix, viewMatrix, vec3.fromValues(delta, delta, 1));
-        mat4.translate(
-          viewMatrix,
-          viewMatrix,
-          vec3.negate(vec3.create(), mousePos),
-        );
-      }),
-    );
-
     subscription.add(
       resize$.subscribe(({ width, height }) => {
         canvas.style.width = `${width}px`;
@@ -303,96 +217,86 @@ export default function LoopBlinnQuad() {
         canvas.width = width * devicePixelRatio;
         canvas.height = height * devicePixelRatio;
 
+        svg.setAttribute("width", `${width}px`);
+        svg.setAttribute("height", `${height}px`);
+
         gl.viewport(0, 0, canvas.width, canvas.height);
         mat4.ortho(projMatrix, 0, width, height, 0, -1, 1);
       }),
     );
 
-    subscription.add(draw$.subscribe(() => draw()));
+    const circles = svg.querySelectorAll("circle");
 
-    const fontSize = 100;
-    let offsetX = 0;
-    let offsetY = fontSize;
-    const text = "Hello World! 你好，世界！";
-
-    opentype.load(fontURL).then((font) => {
-      positionsAndColors = [];
-
-      const getColor = () => Array.from({ length: 3 }, () => Math.random());
-      const packed = (mode: number, baryX: number, baryY: number) =>
-        (mode << 2) | (baryX << 1) | baryY;
-
-      /*
-      > X-Y
-      B(0,1)
-        |\
-        | \
-        |  \
-        |###\
-        |----\
-      A(1,0) C(0,0)
-
-      > U-V
-        A(1,1)
-        |\
-        | \
-        |# \
-        |#  \
-        |----\
-      C(0,0) B(1,0)
-      */
-
-      for (const glyph of font.stringToGlyphs(text)) {
-        const path = glyph.getPath(offsetX, offsetY, fontSize);
-        offsetX += ((glyph.advanceWidth || 0) / 1000) * fontSize;
-        const { polygons, outerQuads, innerQuads } = pathToPolygons(path);
-        const triangles = polygonToTriangles(polygons);
-
-        // prettier-ignore
-        triangles.forEach(({ p1, p2, p3 }) => {
-          positionsAndColors.push(
-            p1.x, p1.y, packed(1, 0, 0), ...getColor(),
-            p2.x, p2.y, packed(1, 0, 0), ...getColor(),
-            p3.x, p3.y, packed(1, 0, 0), ...getColor(),
-          );
+    const getCircle = (mouseX: number, mouseY: number, tolerance = 3) => {
+      for (const circle of circles) {
+        const [cx, cy, r] = ["cx", "cy", "r"].map((attr) => {
+          return toNumber(circle.getAttribute(attr) || "0");
         });
-
-        // prettier-ignore
-        outerQuads.forEach(({ p1, p2, p3 }) => {
-          positionsAndColors.push(
-            p1.x, p1.y, packed(2, 1, 0), ...getColor(),
-            p2.x, p2.y, packed(2, 0, 1), ...getColor(),
-            p3.x, p3.y, packed(2, 0, 0), ...getColor(),
-          );
-        });
-
-        // prettier-ignore
-        innerQuads.forEach(({ p1, p2, p3 }) => {
-          positionsAndColors.push(
-            p1.x, p1.y, packed(0, 1, 0), ...getColor(),
-            p2.x, p2.y, packed(0, 0, 1), ...getColor(),
-            p3.x, p3.y, packed(0, 0, 0), ...getColor(),
-          );
-        });
+        if (
+          Math.sqrt((mouseX - cx) ** 2 + (mouseY - cy) ** 2) <=
+          r + tolerance
+        ) {
+          return circle;
+        }
       }
+      return null;
+    };
+
+    const mouseDown$ = fromEvent<MouseEvent>(container, "mousedown");
+    const mouseMove$ = fromEvent<MouseEvent>(document, "mousemove");
+    const mouseUp$ = fromEvent<MouseEvent>(document, "mouseup");
+
+    const drag$ = mouseDown$.pipe(
+      switchMap((startEvent) => {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = startEvent.clientX - rect.left;
+        const mouseY = startEvent.clientY - rect.top;
+
+        const circle = getCircle(mouseX, mouseY);
+        if (!circle) {
+          return EMPTY;
+        }
+
+        return mouseMove$.pipe(
+          map((moveEvent) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = moveEvent.clientX - rect.left;
+            const mouseY = moveEvent.clientY - rect.top;
+
+            return { circle, mouseX, mouseY };
+          }),
+          takeUntil(mouseUp$),
+        );
+      }),
+    );
+
+    subscription.add(
+      drag$.subscribe(({ circle, mouseX, mouseY }) => {
+        circle.setAttribute("cx", `${mouseX}`);
+        circle.setAttribute("cy", `${mouseY}`);
+      }),
+    );
+
+    const packed = (mode: number, baryX: number, baryY: number) =>
+      (mode << 2) | (baryX << 1) | baryY;
+
+    const draw = () => {
+      const [p1, p2, p3] = [...circles].map((circle) =>
+        ["cx", "cy"].map((attr) => {
+          return toNumber(circle.getAttribute(attr) || "0");
+        }),
+      );
 
       // prettier-ignore
-      // positionsAndColors = [
-      //   // inner
-      //   100,   0, packed(0, 1, 0), ...getColor(),
-      //   0,     0, packed(0, 0, 1), ...getColor(),
-      //   0,   100, packed(0, 0, 0), ...getColor(),
+      positionsAndColors = [
+        p1[0], p1[1], packed(0, 1, 0), 0.0, 0.0, 1.0,
+        p2[0], p2[1], packed(0, 0, 1), 0.0, 0.0, 1.0,
+        p3[0], p3[1], packed(0, 0, 0), 0.0, 0.0, 1.0,
 
-      //   // soild
-      //   200,   0, packed(1, 0, 0), ...getColor(),
-      //   100,   0, packed(1, 0, 0), ...getColor(),
-      //   100, 100, packed(1, 0, 0), ...getColor(),
-
-      //   // outer
-      //   300,   0, packed(2, 1, 0), ...getColor(),
-      //   200,   0, packed(2, 0, 1), ...getColor(),
-      //   200, 100, packed(2, 0, 0), ...getColor(),
-      // ];
+        p1[0], p1[1], packed(2, 1, 0), 1.0, 0.0, 0.0,
+        p2[0], p2[1], packed(2, 0, 1), 1.0, 0.0, 0.0,
+        p3[0], p3[1], packed(2, 0, 0), 1.0, 0.0, 0.0,
+      ];
 
       gl.bindBuffer(gl.ARRAY_BUFFER, positionAndColorBuffer);
       gl.bufferData(
@@ -401,14 +305,34 @@ export default function LoopBlinnQuad() {
         gl.STATIC_DRAW,
       );
 
-      draw();
-    });
+      mat4.identity(mvpMatrix);
+      mat4.multiply(mvpMatrix, mvpMatrix, projMatrix);
+      mat4.multiply(mvpMatrix, mvpMatrix, viewMatrix);
+
+      gl.uniformMatrix4fv(mvpUniformLocation, false, mvpMatrix);
+
+      gl.clearColor(0.9, 0.9, 0.9, 1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.drawArrays(gl.TRIANGLES, 0, positionsAndColors.length / vertexLength);
+    };
+
+    const draw$ = merge(resize$, drag$);
+    subscription.add(draw$.subscribe(() => draw()));
 
     return () => {
-      canvas.remove();
       subscription.unsubscribe();
     };
   }, []);
 
-  return <div ref={containerRef} className="min-h-screen"></div>;
+  return (
+    <div ref={containerRef} className="min-h-screen relative">
+      <canvas></canvas>
+      <svg className="absolute start-0 top-0">
+        <circle cx="100" cy="100" r="3" fill="green" />
+        <circle cx="200" cy="200" r="3" fill="orange" />
+        <circle cx="300" cy="100" r="3" fill="green" />
+      </svg>
+    </div>
+  );
 }

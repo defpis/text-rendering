@@ -28,7 +28,7 @@ export default function ColoredCube() {
       alpha: true,
       premultipliedAlpha: true,
     });
-    if (!gl) return;
+    if (!gl) throw new Error("WebGL 2.0 is not supported");
 
     // 修改后的顶点着色器代码，加入颜色属性
     const vertexShaderSource = `
@@ -55,19 +55,19 @@ export default function ColoredCube() {
 
     // 创建并编译顶点着色器
     const vertexShader = gl.createShader(gl.VERTEX_SHADER);
-    if (!vertexShader) return;
+    if (!vertexShader) throw new Error("Failed to create vertex shader");
     gl.shaderSource(vertexShader, vertexShaderSource);
     gl.compileShader(vertexShader);
 
     // 创建并编译片元着色器
     const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-    if (!fragmentShader) return;
+    if (!fragmentShader) throw new Error("Failed to create fragment shader");
     gl.shaderSource(fragmentShader, fragmentShaderSource);
     gl.compileShader(fragmentShader);
 
     // 创建着色器程序
     const program = gl.createProgram();
-    if (!program) return;
+    if (!program) throw new Error("Failed to create program");
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
     gl.linkProgram(program);

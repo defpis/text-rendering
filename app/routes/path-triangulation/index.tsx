@@ -31,7 +31,7 @@ export default function PathTriangulation() {
       alpha: true,
       premultipliedAlpha: true,
     });
-    if (!gl) return;
+    if (!gl) throw new Error("WebGL2 not supported");
 
     const vertexShaderSource = `
       attribute vec2 a_position;
@@ -55,23 +55,57 @@ export default function PathTriangulation() {
     `;
 
     const vertexShader = gl.createShader(gl.VERTEX_SHADER);
-    if (!vertexShader) return;
+    if (!vertexShader) throw new Error("Failed to create vertex shader");
     gl.shaderSource(vertexShader, vertexShaderSource);
     gl.compileShader(vertexShader);
 
     const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
-    if (!fragmentShader) return;
+    if (!fragmentShader) throw new Error("Failed to create fragment shader");
     gl.shaderSource(fragmentShader, fragmentShaderSource);
     gl.compileShader(fragmentShader);
 
     const program = gl.createProgram();
-    if (!program) return;
+    if (!program) throw new Error("Failed to create program");
     gl.attachShader(program, vertexShader);
     gl.attachShader(program, fragmentShader);
     gl.linkProgram(program);
     gl.useProgram(program);
 
-    let positionsAndColors = [];
+    const vertexLength = 6;
+    let positionsAndColors: number[] = [];
+
+    const positionAndColorBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionAndColorBuffer);
+    gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Float32Array(positionsAndColors),
+      gl.STATIC_DRAW,
+    );
+
+    const positionAttributeLocation = gl.getAttribLocation(
+      program,
+      "a_position",
+    );
+    gl.enableVertexAttribArray(positionAttributeLocation);
+    gl.vertexAttribPointer(
+      positionAttributeLocation,
+      2,
+      gl.FLOAT,
+      false,
+      vertexLength * Float32Array.BYTES_PER_ELEMENT,
+      0,
+    );
+
+    const colorAttributeLocation = gl.getAttribLocation(program, "a_color");
+    gl.enableVertexAttribArray(colorAttributeLocation);
+    gl.vertexAttribPointer(
+      colorAttributeLocation,
+      4,
+      gl.FLOAT,
+      false,
+      vertexLength * Float32Array.BYTES_PER_ELEMENT,
+      2 * Float32Array.BYTES_PER_ELEMENT,
+    );
 
     const mvpUniformLocation = gl.getUniformLocation(program, "u_mvp");
     const colorUniformLocation = gl.getUniformLocation(program, "u_color");
@@ -92,7 +126,7 @@ export default function PathTriangulation() {
       gl.clearColor(1.0, 1.0, 1.0, 1.0);
       gl.clear(gl.COLOR_BUFFER_BIT);
 
-      gl.drawArrays(gl.TRIANGLES, 0, positionsAndColors.length / 6);
+      gl.drawArrays(gl.TRIANGLES, 0, positionsAndColors.length / vertexLength);
     };
 
     const mouseDown$ = fromEvent<MouseEvent>(canvas, "mousedown");
@@ -249,37 +283,11 @@ export default function PathTriangulation() {
         }
       }
 
-      const positionAndColorBuffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, positionAndColorBuffer);
       gl.bufferData(
         gl.ARRAY_BUFFER,
         new Float32Array(positionsAndColors),
         gl.STATIC_DRAW,
-      );
-
-      const positionAttributeLocation = gl.getAttribLocation(
-        program,
-        "a_position",
-      );
-      gl.enableVertexAttribArray(positionAttributeLocation);
-      gl.vertexAttribPointer(
-        positionAttributeLocation,
-        2,
-        gl.FLOAT,
-        false,
-        6 * Float32Array.BYTES_PER_ELEMENT,
-        0,
-      );
-
-      const colorAttributeLocation = gl.getAttribLocation(program, "a_color");
-      gl.enableVertexAttribArray(colorAttributeLocation);
-      gl.vertexAttribPointer(
-        colorAttributeLocation,
-        4,
-        gl.FLOAT,
-        false,
-        6 * Float32Array.BYTES_PER_ELEMENT,
-        2 * Float32Array.BYTES_PER_ELEMENT,
       );
 
       draw();

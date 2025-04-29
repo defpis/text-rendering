@@ -18,4 +18,12 @@ export default [
     path: "loop-blinn-quad",
     file: "routes/loop-blinn-quad/index.tsx",
   },
+  {
+    path: "loop-blinn-quad-test",
+    file: "routes/loop-blinn-quad-test/index.tsx",
+  },
+  {
+    path: "loop-blinn-cubic-test",
+    file: "routes/loop-blinn-cubic-test/index.tsx",
+  },
 ] satisfies RouteConfig;

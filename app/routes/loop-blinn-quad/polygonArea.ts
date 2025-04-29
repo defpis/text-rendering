@@ -1,4 +1,4 @@
-import { determinant2, type Point } from "./utils";
+import { cross, type Point } from "./utils";
 
 export const polygonAreaSigned = (points: Array<Point>): number => {
   if (points.length < 3) {
@@ -9,10 +9,10 @@ export const polygonAreaSigned = (points: Array<Point>): number => {
   let area = 0;
 
   for (let i = 0; i < lastIndex; i++) {
-    area += determinant2(points[i], points[i + 1]);
+    area += cross(points[i], points[i + 1]);
   }
 
-  area += determinant2(points[lastIndex], points[0]);
+  area += cross(points[lastIndex], points[0]);
 
   return area / 2;
 };
