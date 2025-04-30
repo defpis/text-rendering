@@ -1,5 +1,4 @@
 import { mat4, vec3 } from "gl-matrix";
-import { toNumber } from "lodash-es";
 import { useEffect, useRef } from "react";
 import {
   fromEvent,
@@ -11,8 +10,8 @@ import {
   merge,
   EMPTY,
 } from "rxjs";
-import type { Point } from "../loop-blinn-quad/utils";
 import {
+  type Point,
   CurveType,
   equals,
   inside,
@@ -21,6 +20,7 @@ import {
   len,
   lerp2,
 } from "./utils";
+import { round } from "lodash-es";
 
 export interface CubicBezierResult {
   klm: number[];
@@ -36,7 +36,7 @@ export const computeCubic = (
 ): Array<CubicBezierResult> => {
   const [d1, d2, d3, type] = determineType(p0, p1, p2, p3);
 
-  console.log("type", type);
+  console.log("CurveType:", type);
 
   const oneThird = 1.0 / 3.0;
   const twoThirds = 2.0 / 3.0;
@@ -44,7 +44,7 @@ export const computeCubic = (
   const klm: number[] = new Array(12).fill(0);
 
   let flip = false;
-  let splitLoop = -1;
+  let splitType = -1;
   let splitTime = 0;
 
   switch (type) {
@@ -90,11 +90,11 @@ export const computeCubic = (
       const ql = ls / lt;
       const qm = ms / mt;
       if (ql > 0 && ql < 1) {
-        splitLoop = 1;
+        splitType = 0;
         splitTime = ql;
       }
       if (qm > 0 && qm < 1) {
-        splitLoop = 2;
+        splitType = 1;
         splitTime = qm;
       }
 
@@ -172,7 +172,7 @@ export const computeCubic = (
       break;
   }
 
-  if (splitLoop !== -1 && recursiveType === -1) {
+  if (splitType !== -1 && recursiveType === -1) {
     const p01 = lerp2(p0, p1, splitTime);
     const p12 = lerp2(p1, p2, splitTime);
     const p23 = lerp2(p2, p3, splitTime);
@@ -182,13 +182,13 @@ export const computeCubic = (
 
     const p0123 = lerp2(p012, p123, splitTime);
 
-    if (splitLoop === 1) {
+    if (splitType === 0) {
       return [
         ...computeCubic(p0, p01, p012, p0123, 0),
         ...computeCubic(p0123, p123, p23, p3, 1),
       ];
     }
-    if (splitLoop === 2) {
+    if (splitType === 1) {
       return [
         ...computeCubic(p0, p01, p012, p0123, 1),
         ...computeCubic(p0123, p123, p23, p3, 0),
@@ -196,7 +196,7 @@ export const computeCubic = (
     }
   }
 
-  if (recursiveType == 1) flip = !flip;
+  if (recursiveType === 1) flip = !flip;
 
   if (flip) {
     klm[0] = -klm[0];
@@ -276,8 +276,7 @@ export default function LoopBlinnQuadTest() {
     const container = containerRef.current;
     if (!container) return;
 
-    const canvas = container.querySelector("canvas")!;
-    const svg = container.querySelector("svg")!;
+    const [canvas, helper] = container.querySelectorAll("canvas");
 
     const gl = canvas.getContext("webgl2", {
       antialias: true,
@@ -285,6 +284,9 @@ export default function LoopBlinnQuadTest() {
       premultipliedAlpha: true,
     });
     if (!gl) throw new Error("WebGL2 not supported");
+
+    const ctx = helper.getContext("2d");
+    if (!ctx) throw new Error("Canvas2d not supported");
 
     const vertexShaderSource = `#version 300 es
       in vec2 a_position;
@@ -308,20 +310,22 @@ export default function LoopBlinnQuadTest() {
         float k = v_klm.x;
         float l = v_klm.y;
         float m = v_klm.z;
-        float f = k * k * k - l * m;
 
         vec2 dk = vec2(dFdx(k), dFdy(k));
         vec2 dl = vec2(dFdx(l), dFdy(l));
         vec2 dm = vec2(dFdx(m), dFdy(m));
-        
-        float df = 3.0 * k * k * dk.x - (l * dm.x + m * dl.x);
-        float sd = f / length(vec2(df, 3.0 * k * k * dk.y - (l * dm.y + m * dl.y)));
+
+        float dfx = 3.0 * k * k * dk.x - (l * dm.x + m * dl.x);
+        float dfy = 3.0 * k * k * dk.y - (l * dm.y + m * dl.y);
+
+        float f = k * k * k - l * m;
+        float sd = f / length(vec2(dfx, dfy));
 
         float w = fwidth(sd);
         float alpha = smoothstep(-w, w, -sd);
 
         if(alpha < 0.01) discard;
-        fragColor = vec4(0.0, 0.0, 0.0, alpha);
+        fragColor = vec4(0.0, 0.0, 0.0, 0.2 * alpha);
       }
     `;
 
@@ -354,16 +358,12 @@ export default function LoopBlinnQuadTest() {
     }
     gl.useProgram(program);
 
-    const vertexLength = 5;
-    let positionsAndColors: number[] = [];
+    const VERTEX_SIZE = 5;
+    let positions: number[] = [];
 
     const positionAndColorBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionAndColorBuffer);
-    gl.bufferData(
-      gl.ARRAY_BUFFER,
-      new Float32Array(positionsAndColors),
-      gl.STATIC_DRAW,
-    );
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
 
     const positionAttributeLocation = gl.getAttribLocation(
       program,
@@ -375,7 +375,7 @@ export default function LoopBlinnQuadTest() {
       2,
       gl.FLOAT,
       false,
-      vertexLength * Float32Array.BYTES_PER_ELEMENT,
+      VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT,
       0,
     );
 
@@ -386,14 +386,13 @@ export default function LoopBlinnQuadTest() {
       3,
       gl.FLOAT,
       false,
-      vertexLength * Float32Array.BYTES_PER_ELEMENT,
+      VERTEX_SIZE * Float32Array.BYTES_PER_ELEMENT,
       2 * Float32Array.BYTES_PER_ELEMENT,
     );
 
     const mvpUniformLocation = gl.getUniformLocation(program, "u_mvp");
 
     const projMatrix = mat4.create();
-    const viewMatrix = mat4.create();
     const mvpMatrix = mat4.create();
 
     const subscription = new Subscription();
@@ -439,28 +438,34 @@ export default function LoopBlinnQuadTest() {
       resize$.subscribe(({ width, height }) => {
         canvas.style.width = `${width}px`;
         canvas.style.height = `${height}px`;
-
         canvas.width = width * devicePixelRatio;
         canvas.height = height * devicePixelRatio;
 
-        svg.setAttribute("width", `${width}px`);
-        svg.setAttribute("height", `${height}px`);
-
         gl.viewport(0, 0, canvas.width, canvas.height);
         mat4.ortho(projMatrix, 0, width, height, 0, -1, 1);
+
+        helper.style.width = `${width}px`;
+        helper.style.height = `${height}px`;
+        helper.width = width * devicePixelRatio;
+        helper.height = height * devicePixelRatio;
+
+        ctx.scale(devicePixelRatio, devicePixelRatio);
       }),
     );
 
-    const circles = svg.querySelectorAll("circle");
+    const circleSize = 3;
+    const circles = [
+      { x: 120, y: 120 },
+      { x: 200, y: 160 },
+      { x: 280, y: 160 },
+      { x: 360, y: 120 },
+    ];
 
     const getCircle = (mouseX: number, mouseY: number, tolerance = 3) => {
       for (const circle of circles) {
-        const [cx, cy, r] = ["cx", "cy", "r"].map((attr) => {
-          return toNumber(circle.getAttribute(attr) || "0");
-        });
         if (
-          Math.sqrt((mouseX - cx) ** 2 + (mouseY - cy) ** 2) <=
-          r + tolerance
+          Math.sqrt((mouseX - circle.x) ** 2 + (mouseY - circle.y) ** 2) <=
+          circleSize + tolerance
         ) {
           return circle;
         }
@@ -498,29 +503,40 @@ export default function LoopBlinnQuadTest() {
 
     subscription.add(
       drag$.subscribe(({ circle, mouseX, mouseY }) => {
-        circle.setAttribute("cx", `${mouseX}`);
-        circle.setAttribute("cy", `${mouseY}`);
+        circle.x = mouseX;
+        circle.y = mouseY;
       }),
     );
 
-    const draw = () => {
-      const [p0, p1, p2, p3] = [...circles]
-        .map((circle) =>
-          ["cx", "cy"].map((attr) => {
-            return toNumber(circle.getAttribute(attr) || "0");
-          }),
-        )
-        .map(([x, y]) => ({ x, y }));
+    let triangles: Point[][] = [];
+    let debug = true;
 
-      positionsAndColors = [];
+    const getColor = () =>
+      Array.from({ length: 3 }, () => Math.random() * 255).join(",");
+
+    let colorIdx = 0;
+    let colorLen = 10;
+
+    const colors = Array.from({ length: colorLen }, () => getColor());
+
+    let offsetX = 0;
+    let offsetY = 0;
+
+    const draw = () => {
+      const [p0, p1, p2, p3] = circles;
+
+      positions = [];
+      triangles = [];
+
       const quads = computeCubic(p0, p1, p2, p3); // 四边形列表
 
       const triangulation = (quad: CubicBezierResult) => {
         const { klm, points } = quad;
 
         const addTriangle = (...indices: number[]) => {
+          triangles.push(indices.map((idx) => points[idx]));
           indices.forEach((idx) => {
-            positionsAndColors.push(
+            positions.push(
               points[idx].x,
               points[idx].y,
               klm[0 + idx * 3],
@@ -601,20 +617,104 @@ export default function LoopBlinnQuadTest() {
       gl.bindBuffer(gl.ARRAY_BUFFER, positionAndColorBuffer);
       gl.bufferData(
         gl.ARRAY_BUFFER,
-        new Float32Array(positionsAndColors),
+        new Float32Array(positions),
         gl.STATIC_DRAW,
       );
 
       mat4.identity(mvpMatrix);
       mat4.multiply(mvpMatrix, mvpMatrix, projMatrix);
-      mat4.multiply(mvpMatrix, mvpMatrix, viewMatrix);
 
       gl.uniformMatrix4fv(mvpUniformLocation, false, mvpMatrix);
 
       gl.clearColor(0.9, 0.9, 0.9, 1.0);
       gl.clear(gl.COLOR_BUFFER_BIT);
 
-      gl.drawArrays(gl.TRIANGLES, 0, positionsAndColors.length / vertexLength);
+      gl.drawArrays(gl.TRIANGLES, 0, positions.length / VERTEX_SIZE);
+
+      // ------------------------
+
+      ctx.clearRect(0, 0, helper.width, helper.height);
+
+      if (debug) {
+        colorIdx = 0;
+
+        offsetX = 0;
+        offsetY = 400;
+
+        quads.forEach((quad) => {
+          const color = colors[colorIdx++ % colorLen];
+
+          ctx.beginPath();
+          ctx.moveTo(quad.points[3].x, quad.points[3].y + offsetY);
+          quad.points.forEach((point) => {
+            ctx.lineTo(point.x, point.y + offsetY);
+          });
+          ctx.closePath();
+          ctx.strokeStyle = `rgba(${color}, 1.0)`;
+          ctx.stroke();
+          ctx.fillStyle = `rgba(${color}, 0.2)`;
+          ctx.fill();
+
+          ctx.fillStyle = `rgba(0, 0, 0, 1.0)`;
+          quad.points.forEach((point, idx) => {
+            ctx.fillText(
+              [
+                quad.klm[0 + idx * 3],
+                quad.klm[1 + idx * 3],
+                quad.klm[2 + idx * 3],
+              ]
+                .map((n) => round(n, 2))
+                .join(", "),
+              point.x,
+              point.y + offsetY,
+            );
+          });
+
+          offsetY += 100;
+        });
+
+        offsetX = 600;
+        offsetY = 0;
+
+        triangles.forEach((triangle) => {
+          const color = colors[colorIdx++ % colorLen];
+
+          ctx.beginPath();
+          ctx.moveTo(triangle[2].x, triangle[2].y);
+          triangle.forEach((point) => {
+            ctx.lineTo(point.x, point.y);
+          });
+          ctx.closePath();
+          ctx.strokeStyle = `rgba(${color}, 1.0)`;
+          ctx.stroke();
+          ctx.fillStyle = `rgba(${color}, 0.2)`;
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.moveTo(triangle[2].x + offsetX, triangle[2].y + offsetY);
+          triangle.forEach((point) => {
+            ctx.lineTo(point.x + offsetX, point.y + offsetY);
+          });
+          ctx.closePath();
+          ctx.strokeStyle = `rgba(${color}, 1.0)`;
+          ctx.stroke();
+          ctx.fillStyle = `rgba(${color}, 0.2)`;
+          ctx.fill();
+
+          offsetY += 100;
+        });
+      }
+
+      circles.forEach((circle, index) => {
+        ctx.beginPath();
+        ctx.arc(circle.x, circle.y, circleSize, 0, 2 * Math.PI);
+        ctx.closePath();
+        ctx.fillStyle =
+          index === 0 || index === 3
+            ? "rgba(0, 255, 0, 1)"
+            : "rgba(255, 0, 0, 1)";
+        ctx.fill();
+      });
     };
 
     const draw$ = merge(resize$, drag$);
@@ -628,12 +728,7 @@ export default function LoopBlinnQuadTest() {
   return (
     <div ref={containerRef} className="min-h-screen relative">
       <canvas></canvas>
-      <svg className="absolute start-0 top-0">
-        <circle cx="120" cy="120" r="3" fill="green" />
-        <circle cx="200" cy="160" r="3" fill="orange" />
-        <circle cx="280" cy="160" r="3" fill="orange" />
-        <circle cx="360" cy="120" r="3" fill="green" />
-      </svg>
+      <canvas className="absolute start-0 top-0"></canvas>
     </div>
   );
 }

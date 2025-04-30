@@ -31,10 +31,11 @@ export default function LoopBlinnQuadTest() {
 
     const vertexShaderSource = `#version 300 es
       in vec2 a_position;
-      in float a_mode_bary;
+      in float a_bary;
       in vec3 a_color;
 
-      flat out float v_mode;
+      flat out float v_sign;
+
       out vec2 v_bary;
       out vec3 v_color;
 
@@ -44,46 +45,50 @@ export default function LoopBlinnQuadTest() {
         gl_Position = u_mvp * vec4(a_position, 0.0, 1.0);
         v_color = a_color;
 
-        uint mode_bary = uint(a_mode_bary);
-        v_mode = float((mode_bary >> 2) & 0x3u) - 1.0;
-        v_bary.x = float((mode_bary >> 1) & 0x1u);
-        v_bary.y = float((mode_bary >> 0) & 0x1u);
+        uint bary;
+        if (a_bary > 3.0) {
+          v_sign = -1.0;
+          bary = uint(a_bary - 4.0);
+        } else {
+          v_sign = 1.0;
+          bary = uint(a_bary);
+        }
+
+        v_bary.x = float((bary >> 1) & 0x1u);
+        v_bary.y = float((bary >> 0) & 0x1u);
       }
     `;
 
     const fragmentShaderSource = `#version 300 es
       precision mediump float;
-      flat in float v_mode;
+
       in vec2 v_bary;
       in vec3 v_color;
+
+      flat in float v_sign;
 
       layout(location = 0) out vec4 fragColor;
 
       void main() {
-        if ((v_mode > -0.5) && (v_mode < 0.5)) {
-          fragColor = vec4(v_color, 1.0);
+        vec2 uv = vec2(1.0, 1.0) * v_bary.x + vec2(0.5, 0.0) * v_bary.y;
+
+        vec2 px = dFdx(uv);
+        vec2 py = dFdy(uv);
+
+        float f = uv.x * uv.x - uv.y;
+
+        float fx = 2.0 * uv.x * px.x - px.y;
+        float fy = 2.0 * uv.x * py.x - py.y;
+
+        float sd = f / sqrt(fx * fx + fy * fy);
+
+        float w = fwidth(sd);
+        float a = smoothstep(-w, w, v_sign * sd);
+
+        if (a < 0.001) {
+          discard;
         } else {
-          vec2 uv = vec2(1.0, 1.0) * v_bary.x + vec2(0.5, 0.0) * v_bary.y;
-
-          vec2 px = dFdx(uv);
-          vec2 py = dFdy(uv);
-
-          float f = uv.x * uv.x - uv.y;
-
-          float fx = 2.0 * uv.x * px.x - px.y;
-          float fy = 2.0 * uv.x * py.x - py.y;
-
-          float sd = f / sqrt(fx * fx + fy * fy);
-          float s = v_mode > 0.0 ? -1.0 : 1.0;
-
-          float w = fwidth(sd);
-          float a = smoothstep(-w, w, sd * s);
-
-          if (a < 0.001) {
-            discard;
-          } else {
-            fragColor = vec4(v_color, a);
-          }
+          fragColor = vec4(v_color, a);
         }
       }
     `;
@@ -142,10 +147,10 @@ export default function LoopBlinnQuadTest() {
       0,
     );
 
-    const modeAttributeLocation = gl.getAttribLocation(program, "a_mode_bary");
-    gl.enableVertexAttribArray(modeAttributeLocation);
+    const baryAttributeLocation = gl.getAttribLocation(program, "a_bary");
+    gl.enableVertexAttribArray(baryAttributeLocation);
     gl.vertexAttribPointer(
-      modeAttributeLocation,
+      baryAttributeLocation,
       1,
       gl.FLOAT,
       false,
@@ -277,8 +282,8 @@ export default function LoopBlinnQuadTest() {
       }),
     );
 
-    const packed = (mode: number, baryX: number, baryY: number) =>
-      (mode << 2) | (baryX << 1) | baryY;
+    const packed = (baryX: number, baryY: number, offset = 0) =>
+      ((baryX << 1) | baryY) + offset;
 
     const draw = () => {
       const [p1, p2, p3] = [...circles].map((circle) =>
@@ -289,13 +294,17 @@ export default function LoopBlinnQuadTest() {
 
       // prettier-ignore
       positionsAndColors = [
-        p1[0], p1[1], packed(0, 1, 0), 0.0, 0.0, 1.0,
-        p2[0], p2[1], packed(0, 0, 1), 0.0, 0.0, 1.0,
-        p3[0], p3[1], packed(0, 0, 0), 0.0, 0.0, 1.0,
+        p1[0], p1[1], packed(1, 0), 0.0, 0.0, 1.0,
+        p2[0], p2[1], packed(0, 1), 0.0, 0.0, 1.0,
+        p3[0], p3[1], packed(0, 0), 0.0, 0.0, 1.0,
 
-        p1[0], p1[1], packed(2, 1, 0), 1.0, 0.0, 0.0,
-        p2[0], p2[1], packed(2, 0, 1), 1.0, 0.0, 0.0,
-        p3[0], p3[1], packed(2, 0, 0), 1.0, 0.0, 0.0,
+        p1[0] + 300, p1[1], packed(1, 0), 0.0, 1.0, 0.0,
+        p2[0] + 300, p2[1], packed(0, 1), 0.0, 1.0, 0.0,
+        p3[0] + 300, p3[1], packed(1, 1), 0.0, 1.0, 0.0, // 第三个点重心坐标设置为 (1, 1)
+
+        p1[0] + 600, p1[1], packed(1, 0, 4), 1.0, 0.0, 0.0,
+        p2[0] + 600, p2[1], packed(0, 1, 4), 1.0, 0.0, 0.0,
+        p3[0] + 600, p3[1], packed(0, 0, 4), 1.0, 0.0, 0.0,
       ];
 
       gl.bindBuffer(gl.ARRAY_BUFFER, positionAndColorBuffer);

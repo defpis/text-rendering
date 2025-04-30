@@ -4,12 +4,12 @@ export interface Point {
 }
 
 export enum CurveType {
-  POINT = "POINT",
-  LINE = "LINE",
-  QUADRATIC = "QUADRATIC",
-  CUSP = "CUSP",
-  LOOP = "LOOP",
-  SERPENTINE = "SERPENTINE",
+  POINT = "Point",
+  LINE = "Line",
+  QUADRATIC = "Quadratic",
+  CUSP = "Cusp",
+  LOOP = "Loop",
+  SERPENTINE = "Serpentine",
 }
 
 export const lerp = (a: number, b: number, t: number) => {
