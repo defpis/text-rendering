@@ -1,5 +1,5 @@
 {
-  "name": "text-render",
+  "name": "text-rendering",
   "private": true,
   "type": "module",
   "scripts": {

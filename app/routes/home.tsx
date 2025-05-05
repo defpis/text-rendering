@@ -4,7 +4,7 @@ import { Link } from "react-router";
 export function meta({}: Route.MetaArgs) {
   return [
     { title: "Home" },
-    { name: "description", content: "Welcome to Text Render!" },
+    { name: "description", content: "Welcome to Text Rendering!" },
   ];
 }
 
@@ -14,7 +14,7 @@ export default function Home() {
       <div className="flex flex-col justify-center items-center min-h-screen">
         <div>
           <h1 className="text-6xl font-semibold text-black dark:text-white">
-            Text Render
+            Text Rendering
           </h1>
           <ul className="mt-4 ml-4 list-disc list-inside text-gray-600 dark:text-gray-400">
             <li>
@@ -37,6 +37,9 @@ export default function Home() {
             </li>
             <li>
               <Link to="/loop-blinn-cubic">Loop-Blinn Cubic</Link>
+            </li>
+            <li>
+              <Link to="/loop-blinn-cjk-test">Loop-Blinn CJK Test</Link>
             </li>
           </ul>
         </div>

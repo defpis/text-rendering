@@ -30,4 +30,8 @@ export default [
     path: "loop-blinn-cubic",
     file: "routes/loop-blinn-cubic/index.tsx",
   },
+  {
+    path: "loop-blinn-cjk-test",
+    file: "routes/loop-blinn-cjk-test/index.tsx",
+  },
 ] satisfies RouteConfig;

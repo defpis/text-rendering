@@ -11,8 +11,7 @@ import {
   switchMap,
   takeUntil,
 } from "rxjs";
-// import fontURL from "~/assets/fonts/LXGWWenKaiMono-Regular.ttf";
-import fontURL from "~/assets/fonts/ComicCode.otf";
+import fontURL from "~/assets/fonts/LXGWWenKaiMono-Regular.ttf";
 import { pathToPolygons } from "./pathToPolygons";
 import { polygonToTriangles } from "./polygonToTriangles";
 
