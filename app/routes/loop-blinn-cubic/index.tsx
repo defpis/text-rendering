@@ -1,5 +1,6 @@
 import { mat4, vec3 } from "gl-matrix";
 import { clamp } from "lodash-es";
+import opentype from "opentype.js";
 import { useEffect, useRef } from "react";
 import {
   fromEvent,
@@ -10,12 +11,12 @@ import {
   switchMap,
   takeUntil,
 } from "rxjs";
-import opentype from "opentype.js";
-import fontURL from "~/assets/fonts/LXGWWenKaiMono-Regular.ttf";
+// import fontURL from "~/assets/fonts/LXGWWenKaiMono-Regular.ttf";
+import fontURL from "~/assets/fonts/ComicCode.otf";
 import { pathToPolygons } from "./pathToPolygons";
 import { polygonToTriangles } from "./polygonToTriangles";
 
-export default function LoopBlinnQuad() {
+export default function LoopBlinnCubic() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -35,60 +36,48 @@ export default function LoopBlinnQuad() {
 
     const vertexShaderSource = `#version 300 es
       in vec2 a_position;
-      in float a_mode_bary;
+      in vec3 a_klm;
       in vec3 a_color;
 
-      flat out float v_mode;
-      out vec2 v_bary;
+      out vec3 v_klm;
       out vec3 v_color;
 
       uniform mat4 u_mvp;
 
       void main() {
         gl_Position = u_mvp * vec4(a_position, 0.0, 1.0);
+        v_klm = a_klm;
         v_color = a_color;
-
-        uint mode_bary = uint(a_mode_bary);
-        v_mode = float((mode_bary >> 2) & 0x3u) - 1.0;
-        v_bary.x = float((mode_bary >> 1) & 0x1u);
-        v_bary.y = float((mode_bary >> 0) & 0x1u);
       }
     `;
 
     const fragmentShaderSource = `#version 300 es
       precision mediump float;
-      flat in float v_mode;
-      in vec2 v_bary;
+
+      in vec3 v_klm;
       in vec3 v_color;
 
       layout(location = 0) out vec4 fragColor;
 
       void main() {
-        if ((v_mode > -0.5) && (v_mode < 0.5)) {
-          fragColor = vec4(v_color, 1.0);
-        } else {
-          vec2 uv = vec2(1.0, 1.0) * v_bary.x + vec2(0.5, 0.0) * v_bary.y;
+        float k = v_klm.x;
+        float l = v_klm.y;
+        float m = v_klm.z;
 
-          vec2 px = dFdx(uv);
-          vec2 py = dFdy(uv);
+        vec2 dk = vec2(dFdx(k), dFdy(k));
+        vec2 dl = vec2(dFdx(l), dFdy(l));
+        vec2 dm = vec2(dFdx(m), dFdy(m));
 
-          float f = uv.x * uv.x - uv.y;
+        float dfx = 3.0 * k * k * dk.x - (l * dm.x + m * dl.x);
+        float dfy = 3.0 * k * k * dk.y - (l * dm.y + m * dl.y);
 
-          float fx = 2.0 * uv.x * px.x - px.y;
-          float fy = 2.0 * uv.x * py.x - py.y;
+        float f = k * k * k - l * m;
+        float sd = f / length(vec2(dfx, dfy));
 
-          float sd = f / sqrt(fx * fx + fy * fy);
-          float s = v_mode > 0.0 ? -1.0 : 1.0;
+        float alpha = smoothstep(-1.0, 1.0, sd);
 
-          float w = fwidth(sd);
-          float a = smoothstep(-w, w, sd * s);
-
-          if (a < 0.001) {
-            discard;
-          } else {
-            fragColor = vec4(v_color, a);
-          }
-        }
+        if(alpha < 0.001) discard;
+        fragColor = vec4(v_color, alpha);
       }
     `;
 
@@ -121,7 +110,7 @@ export default function LoopBlinnQuad() {
     }
     gl.useProgram(program);
 
-    const vertexLength = 6;
+    const vertexLength = 8;
     let positionsAndColors: number[] = [];
 
     const positionAndColorBuffer = gl.createBuffer();
@@ -146,14 +135,11 @@ export default function LoopBlinnQuad() {
       0,
     );
 
-    const modeBaryAttributeLocation = gl.getAttribLocation(
-      program,
-      "a_mode_bary",
-    );
-    gl.enableVertexAttribArray(modeBaryAttributeLocation);
+    const klmAttributeLocation = gl.getAttribLocation(program, "a_klm");
+    gl.enableVertexAttribArray(klmAttributeLocation);
     gl.vertexAttribPointer(
-      modeBaryAttributeLocation,
-      1,
+      klmAttributeLocation,
+      3,
       gl.FLOAT,
       false,
       vertexLength * Float32Array.BYTES_PER_ELEMENT,
@@ -168,7 +154,7 @@ export default function LoopBlinnQuad() {
       gl.FLOAT,
       false,
       vertexLength * Float32Array.BYTES_PER_ELEMENT,
-      3 * Float32Array.BYTES_PER_ELEMENT,
+      5 * Float32Array.BYTES_PER_ELEMENT,
     );
 
     const mvpUniformLocation = gl.getUniformLocation(program, "u_mvp");
@@ -316,83 +302,50 @@ export default function LoopBlinnQuad() {
     const text = "Hello World! 你好，世界！";
 
     opentype.load(fontURL).then((font) => {
+      const flip = fontURL.endsWith(".otf");
+      const sign = flip ? -1 : 1;
+
       positionsAndColors = [];
 
-      const getColor = () => Array.from({ length: 3 }, () => Math.random());
-      const packed = (mode: number, baryX: number, baryY: number) =>
-        (mode << 2) | (baryX << 1) | baryY;
-
-      /*
-      > X-Y
-      B(0,1)
-        |\
-        | \
-        |  \
-        |###\
-        |----\
-      A(1,0) C(0,0)
-
-      > U-V
-        A(1,1)
-        |\
-        | \
-        |# \
-        |#  \
-        |----\
-      C(0,0) B(1,0)
-      */
+      const getColor = () =>
+        Array.from({ length: 3 }, () => Math.random() * 255).join(",");
 
       for (const glyph of font.stringToGlyphs(text)) {
         const path = glyph.getPath(offsetX, offsetY, fontSize);
         offsetX += ((glyph.advanceWidth || 0) / 1000) * fontSize;
-        const { polygons, outerQuads, innerQuads } = pathToPolygons(path);
+        const { polygons, outerTriangles, innerTriangles } = pathToPolygons(
+          path,
+          sign,
+        );
         const triangles = polygonToTriangles(polygons);
 
         // prettier-ignore
-        triangles.forEach(({ p1, p2, p3 }) => {
+        triangles.forEach(({ p0, p1, p2 }) => {
           positionsAndColors.push(
-            p1.x, p1.y, packed(1, 0, 0), 0, 1, 0,
-            p2.x, p2.y, packed(1, 0, 0), 0, 1, 0,
-            p3.x, p3.y, packed(1, 0, 0), 0, 1, 0,
+            p0.x, p0.y, 1, 1, 0, 0, 1, 0,
+            p1.x, p1.y, 1, 0, 1, 0, 1, 0,
+            p2.x, p2.y, 1, 0, 0, 0, 1, 0,
           );
         });
 
         // prettier-ignore
-        outerQuads.forEach(({ p1, p2, p3 }) => {
+        outerTriangles.forEach(([p0, p1, p2]) => {
           positionsAndColors.push(
-            p1.x, p1.y, packed(2, 1, 0), 1, 0, 0,
-            p2.x, p2.y, packed(2, 0, 1), 1, 0, 0,
-            p3.x, p3.y, packed(2, 0, 0), 1, 0, 0,
+            p0.x, p0.y, sign * p0.k, sign * p0.l, p0.m, 1, 0, 0,
+            p1.x, p1.y, sign * p1.k, sign * p1.l, p1.m, 1, 0, 0,
+            p2.x, p2.y, sign * p2.k, sign * p2.l, p2.m, 1, 0, 0,
           );
         });
 
         // prettier-ignore
-        innerQuads.forEach(({ p1, p2, p3 }) => {
+        innerTriangles.forEach(([p0, p1, p2]) => {
           positionsAndColors.push(
-            p1.x, p1.y, packed(0, 1, 0), 0, 0, 1,
-            p2.x, p2.y, packed(0, 0, 1), 0, 0, 1,
-            p3.x, p3.y, packed(0, 0, 0), 0, 0, 1,
+            p0.x, p0.y, sign * p0.k, sign * p0.l, p0.m, 0, 0, 1,
+            p1.x, p1.y, sign * p1.k, sign * p1.l, p1.m, 0, 0, 1,
+            p2.x, p2.y, sign * p2.k, sign * p2.l, p2.m, 0, 0, 1,
           );
         });
       }
-
-      // prettier-ignore
-      // positionsAndColors = [
-      //   // inner
-      //   100,   0, packed(0, 1, 0), ...getColor(),
-      //   0,     0, packed(0, 0, 1), ...getColor(),
-      //   0,   100, packed(0, 0, 0), ...getColor(),
-
-      //   // soild
-      //   200,   0, packed(1, 0, 0), ...getColor(),
-      //   100,   0, packed(1, 0, 0), ...getColor(),
-      //   100, 100, packed(1, 0, 0), ...getColor(),
-
-      //   // outer
-      //   300,   0, packed(2, 1, 0), ...getColor(),
-      //   200,   0, packed(2, 0, 1), ...getColor(),
-      //   200, 100, packed(2, 0, 0), ...getColor(),
-      // ];
 
       gl.bindBuffer(gl.ARRAY_BUFFER, positionAndColorBuffer);
       gl.bufferData(

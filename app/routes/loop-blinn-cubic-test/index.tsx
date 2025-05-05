@@ -36,8 +36,6 @@ export const computeCubic = (
 ): Array<CubicBezierResult> => {
   const [d1, d2, d3, type] = determineType(p0, p1, p2, p3);
 
-  console.log("CurveType:", type);
-
   const oneThird = 1.0 / 3.0;
   const twoThirds = 2.0 / 3.0;
 
@@ -240,7 +238,7 @@ export const determineType = (
   let d2 = d3 - a2;
   let d1 = d2 - a2 + a1;
 
-  const max = Math.max(d1, d2, d3);
+  const max = Math.sqrt(d1 * d1 + d2 * d2 + d3 * d3);
 
   d1 /= max;
   d2 /= max;
@@ -361,8 +359,8 @@ export default function LoopBlinnQuadTest() {
     const VERTEX_SIZE = 5;
     let positions: number[] = [];
 
-    const positionAndColorBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionAndColorBuffer);
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
 
     const positionAttributeLocation = gl.getAttribLocation(
@@ -614,7 +612,7 @@ export default function LoopBlinnQuadTest() {
 
       quads.forEach((quad) => triangulation(quad));
 
-      gl.bindBuffer(gl.ARRAY_BUFFER, positionAndColorBuffer);
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
       gl.bufferData(
         gl.ARRAY_BUFFER,
         new Float32Array(positions),

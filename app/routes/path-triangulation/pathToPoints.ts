@@ -150,7 +150,7 @@ export const pathToPoints = (
         case "s":
         case "t":
         case "a":
-          console.log(`${normalizedCommand} is not implemented`);
+          console.log(`${normalizedCommand} is not implemented!`);
           break;
       }
     }

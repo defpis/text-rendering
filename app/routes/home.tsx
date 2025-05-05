@@ -27,13 +27,16 @@ export default function Home() {
               <Link to="/path-triangulation">Path Triangulation</Link>
             </li>
             <li>
-              <Link to="/loop-blinn-quad">Loop-Blinn Quadratic</Link>
-            </li>
-            <li>
               <Link to="/loop-blinn-quad-test">Loop-Blinn Quadratic Test</Link>
             </li>
             <li>
+              <Link to="/loop-blinn-quad">Loop-Blinn Quadratic</Link>
+            </li>
+            <li>
               <Link to="/loop-blinn-cubic-test">Loop-Blinn Cubic Test</Link>
+            </li>
+            <li>
+              <Link to="/loop-blinn-cubic">Loop-Blinn Cubic</Link>
             </li>
           </ul>
         </div>

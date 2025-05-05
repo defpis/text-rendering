@@ -15,15 +15,19 @@ export default [
     file: "routes/path-triangulation/index.tsx",
   },
   {
-    path: "loop-blinn-quad",
-    file: "routes/loop-blinn-quad/index.tsx",
-  },
-  {
     path: "loop-blinn-quad-test",
     file: "routes/loop-blinn-quad-test/index.tsx",
   },
   {
+    path: "loop-blinn-quad",
+    file: "routes/loop-blinn-quad/index.tsx",
+  },
+  {
     path: "loop-blinn-cubic-test",
     file: "routes/loop-blinn-cubic-test/index.tsx",
+  },
+  {
+    path: "loop-blinn-cubic",
+    file: "routes/loop-blinn-cubic/index.tsx",
   },
 ] satisfies RouteConfig;
