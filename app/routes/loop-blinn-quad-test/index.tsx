@@ -23,7 +23,7 @@ export default function LoopBlinnQuadTest() {
     const svg = container.querySelector("svg")!;
 
     const gl = canvas.getContext("webgl2", {
-      antialias: true,
+      antialias: false,
       alpha: true,
       premultipliedAlpha: true,
     });

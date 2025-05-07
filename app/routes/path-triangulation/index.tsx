@@ -27,7 +27,7 @@ export default function PathTriangulation() {
     container.appendChild(canvas);
 
     const gl = canvas.getContext("webgl2", {
-      antialias: true,
+      antialias: false,
       alpha: true,
       premultipliedAlpha: true,
     });
@@ -108,9 +108,6 @@ export default function PathTriangulation() {
     );
 
     const mvpUniformLocation = gl.getUniformLocation(program, "u_mvp");
-    const colorUniformLocation = gl.getUniformLocation(program, "u_color");
-
-    gl.uniform4fv(colorUniformLocation, [0.0, 0.0, 0.0, 1.0]);
 
     const projMatrix = mat4.create();
     const viewMatrix = mat4.create();

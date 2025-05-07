@@ -277,7 +277,7 @@ export default function LoopBlinnCubicTest() {
     const [canvas, helper] = container.querySelectorAll("canvas");
 
     const gl = canvas.getContext("webgl2", {
-      antialias: true,
+      antialias: false,
       alpha: true,
       premultipliedAlpha: true,
     });

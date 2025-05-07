@@ -41,6 +41,9 @@ export default function Home() {
             <li>
               <Link to="/loop-blinn-cjk-test">Loop-Blinn CJK Test</Link>
             </li>
+            <li>
+              <Link to="/perfect-antialiasing">Perfect Antialiasing</Link>
+            </li>
           </ul>
         </div>
       </div>

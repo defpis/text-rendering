@@ -34,4 +34,8 @@ export default [
     path: "loop-blinn-cjk-test",
     file: "routes/loop-blinn-cjk-test/index.tsx",
   },
+  {
+    path: "perfect-antialiasing",
+    file: "routes/perfect-antialiasing/index.tsx",
+  },
 ] satisfies RouteConfig;

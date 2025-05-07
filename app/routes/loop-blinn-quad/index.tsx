@@ -27,7 +27,7 @@ export default function LoopBlinnQuad() {
     container.appendChild(canvas);
 
     const gl = canvas.getContext("webgl2", {
-      antialias: true,
+      antialias: false,
       alpha: true,
       premultipliedAlpha: true,
     });
