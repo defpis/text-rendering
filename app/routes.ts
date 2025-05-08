@@ -38,4 +38,8 @@ export default [
     path: "perfect-antialiasing",
     file: "routes/perfect-antialiasing/index.tsx",
   },
+  {
+    path: "loop-blinn-perfect-antialiasing",
+    file: "routes/loop-blinn-perfect-antialiasing/index.tsx",
+  },
 ] satisfies RouteConfig;

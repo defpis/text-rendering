@@ -44,6 +44,11 @@ export default function Home() {
             <li>
               <Link to="/perfect-antialiasing">Perfect Antialiasing</Link>
             </li>
+            <li>
+              <Link to="/loop-blinn-perfect-antialiasing">
+                Loop-Blinn + Perfect Antialiasing
+              </Link>
+            </li>
           </ul>
         </div>
       </div>
