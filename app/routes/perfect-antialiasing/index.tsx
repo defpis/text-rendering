@@ -203,7 +203,7 @@ export default function PerfectAntialiasing() {
         );
 
         float alpha = clamp(float(abs(polygon_area)) / (2.0 * PRECISION_SCALE * PRECISION_SCALE), 0.0, 1.0);
-        o_color = vec4(v_color, alpha);
+        o_color = vec4(v_color * alpha, alpha);
       }
     `;
 
@@ -310,7 +310,7 @@ export default function PerfectAntialiasing() {
     const viewMatrix = mat4.create();
     const mvpMatrix = mat4.create();
 
-    gl.clearColor(0.0, 0.0, 0.0, 0.0);
+    gl.clearColor(0.0, 0.0, 0.0, 1.0);
 
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE);
@@ -458,7 +458,7 @@ export default function PerfectAntialiasing() {
       positionsAndColors = [];
 
       const getColor = () =>
-        debug ? Array.from({ length: 3 }, () => Math.random()) : [0, 0, 0];
+        debug ? Array.from({ length: 3 }, () => Math.random()) : [1, 1, 1];
 
       for (const glyph of font.stringToGlyphs(text)) {
         const path = glyph.getPath(offsetX, offsetY, fontSize);
