@@ -49,6 +49,11 @@ export default function Home() {
                 Loop-Blinn + Perfect Antialiasing
               </Link>
             </li>
+            <li>
+              <Link to="/loop-blinn-triangle-fan-msaa">
+                Loop-Blinn + Triangle Fan + MSAA
+              </Link>
+            </li>
           </ul>
         </div>
       </div>

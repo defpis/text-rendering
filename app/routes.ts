@@ -42,4 +42,8 @@ export default [
     path: "loop-blinn-perfect-antialiasing",
     file: "routes/loop-blinn-perfect-antialiasing/index.tsx",
   },
+  {
+    path: "loop-blinn-triangle-fan-msaa",
+    file: "routes/loop-blinn-triangle-fan-msaa/index.tsx",
+  },
 ] satisfies RouteConfig;
