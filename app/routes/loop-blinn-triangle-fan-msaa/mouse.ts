@@ -17,6 +17,11 @@ export function registerMouseEvents(
     onDraw?: () => void;
   },
 ): Subscription {
+  const container = canvas.parentElement;
+  if (!container) {
+    throw new Error("Canvas must have a parent element!");
+  }
+
   const subscription = new Subscription();
 
   const mouseDown$ = fromEvent<MouseEvent>(canvas, "mousedown");
@@ -33,7 +38,7 @@ export function registerMouseEvents(
           subscriber.next({ width, height });
         });
       });
-      resizeObserver.observe(canvas.parentElement!);
+      resizeObserver.observe(container);
 
       // 处理设备像素比变化，比如从一个高分辨率屏幕切换到一个低分辨率屏幕
       let remove: Function | null = null;
@@ -49,7 +54,7 @@ export function registerMouseEvents(
           remove = null;
         };
 
-        const { width, height } = canvas.parentElement!.getBoundingClientRect();
+        const { width, height } = container.getBoundingClientRect();
         subscriber.next({ width, height });
       };
       onPixelRatioChange();

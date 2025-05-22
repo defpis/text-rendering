@@ -16,6 +16,28 @@ interface DataPart {
 const START_INDEX = 0;
 const END_INDEX = 0xffff;
 
+const AA_FACTOR = 6;
+
+// prettier-ignore
+const AA_DELTAS = new Float32Array([
+  -3 / 12, -5 / 12, // [x+1] B
+  -1 / 12,  1 / 12, // [x+1] B
+   1 / 12, -5 / 12, // R
+   3 / 12,  1 / 12, // R
+   5 / 12, -3 / 12, // G
+   7 / 12,  3 / 12, // G
+]);
+
+// prettier-ignore
+const AA_COLORS = new Float32Array([
+   1 / 255,        0,        0,
+  16 / 255,        0,        0,
+         0,  1 / 255,        0,
+         0, 16 / 255,        0,
+         0,        0,  1 / 255,
+         0,        0, 16 / 255,
+]);
+
 class TriangleRenderer {
   gl: WebGL2RenderingContext;
   program: WebGLProgram;
@@ -24,7 +46,13 @@ class TriangleRenderer {
 
   parts: DataPart[] = [];
 
-  constructor(gl: WebGL2RenderingContext) {
+  aaDeltasBuffer: WebGLBuffer;
+  aaColorsBuffer: WebGLBuffer;
+
+  constructor(
+    gl: WebGL2RenderingContext,
+    { aaDeltasBuffer, aaColorsBuffer }: any,
+  ) {
     this.gl = gl;
     this.program = twgl.createProgram(gl, [
       triangleShader.vs,
@@ -32,6 +60,9 @@ class TriangleRenderer {
     ]);
     this.uniformSetters = twgl.createUniformSetters(gl, this.program);
     this.attributeSetters = twgl.createAttributeSetters(gl, this.program);
+
+    this.aaDeltasBuffer = aaDeltasBuffer;
+    this.aaColorsBuffer = aaColorsBuffer;
   }
 
   setData(parts: DataPart[]) {
@@ -87,6 +118,18 @@ class TriangleRenderer {
         this.attributeSetters,
         {
           a_position: { buffer: posBuffer, numComponents: 2 },
+          a_aa_delta: {
+            buffer: this.aaDeltasBuffer,
+            numComponents: 2,
+            divisor: 1,
+            stride: 2 * Float32Array.BYTES_PER_ELEMENT,
+          },
+          a_aa_color: {
+            buffer: this.aaColorsBuffer,
+            numComponents: 3,
+            divisor: 1,
+            stride: 3 * Float32Array.BYTES_PER_ELEMENT,
+          },
         },
         indBuffer,
       );
@@ -97,7 +140,7 @@ class TriangleRenderer {
         indices.length,
         gl.UNSIGNED_SHORT,
         0,
-        1,
+        AA_FACTOR,
       );
       gl.bindVertexArray(null);
     }
@@ -114,11 +157,20 @@ class CurveRenderer {
   vao: WebGLVertexArrayObject | null = null;
   count = 0;
 
-  constructor(gl: WebGL2RenderingContext) {
+  aaDeltasBuffer: WebGLBuffer;
+  aaColorsBuffer: WebGLBuffer;
+
+  constructor(
+    gl: WebGL2RenderingContext,
+    { aaDeltasBuffer, aaColorsBuffer }: any,
+  ) {
     this.gl = gl;
     this.program = twgl.createProgram(gl, [curveShader.vs, curveShader.fs]);
     this.uniformSetters = twgl.createUniformSetters(gl, this.program);
     this.attributeSetters = twgl.createAttributeSetters(gl, this.program);
+
+    this.aaDeltasBuffer = aaDeltasBuffer;
+    this.aaColorsBuffer = aaColorsBuffer;
   }
 
   setData(positions: number[]) {
@@ -144,6 +196,18 @@ class CurveRenderer {
         offset: 2 * Float32Array.BYTES_PER_ELEMENT,
         stride: size * Float32Array.BYTES_PER_ELEMENT,
       },
+      a_aa_delta: {
+        buffer: this.aaDeltasBuffer,
+        numComponents: 2,
+        divisor: 1,
+        stride: 2 * Float32Array.BYTES_PER_ELEMENT,
+      },
+      a_aa_color: {
+        buffer: this.aaColorsBuffer,
+        numComponents: 3,
+        divisor: 1,
+        stride: 3 * Float32Array.BYTES_PER_ELEMENT,
+      },
     });
 
     this.count = positions.length / size;
@@ -160,7 +224,7 @@ class CurveRenderer {
     twgl.setUniforms(this.uniformSetters, uniforms);
 
     gl.bindVertexArray(this.vao);
-    gl.drawArraysInstanced(gl.TRIANGLES, 0, this.count, 1);
+    gl.drawArraysInstanced(gl.TRIANGLES, 0, this.count, AA_FACTOR);
     gl.bindVertexArray(null);
 
     gl.disable(gl.BLEND);
@@ -256,8 +320,17 @@ export default function LoopBlinnTriangleFanMSAA() {
     const gl = canvas.getContext("webgl2", { antialias: false });
     if (!gl) throw new Error("WebGL 2.0 is not supported");
 
-    const triangleRenderer = new TriangleRenderer(gl); // 处理轮廓按照 TRIANGLE_FAN 方式绘制
-    const curveRenderer = new CurveRenderer(gl); // 绘制贝塞尔曲线填充
+    const aaDeltasBuffer = twgl.createBufferFromTypedArray(gl, AA_DELTAS);
+    const aaColorsBuffer = twgl.createBufferFromTypedArray(gl, AA_COLORS);
+
+    const triangleRenderer = new TriangleRenderer(gl, {
+      aaDeltasBuffer,
+      aaColorsBuffer,
+    }); // 处理轮廓按照 TRIANGLE_FAN 方式绘制
+    const curveRenderer = new CurveRenderer(gl, {
+      aaDeltasBuffer,
+      aaColorsBuffer,
+    }); // 绘制贝塞尔曲线填充
     const postRenderer = new PostRenderer(gl); // 多重采样和亚像素抗锯齿后处理
 
     const projMatrix = mat4.create();
@@ -288,8 +361,13 @@ export default function LoopBlinnTriangleFanMSAA() {
 
       gl.clear(gl.COLOR_BUFFER_BIT);
 
-      triangleRenderer.render({ u_mvp: mvpMatrix });
-      curveRenderer.render({ u_mvp: mvpMatrix });
+      const uniforms = {
+        u_mvp: mvpMatrix,
+        u_size: [canvas.width, canvas.height],
+      };
+
+      triangleRenderer.render(uniforms);
+      curveRenderer.render(uniforms);
 
       twgl.bindFramebufferInfo(gl);
 
@@ -363,15 +441,38 @@ export default function LoopBlinnTriangleFanMSAA() {
           sign,
         );
 
-        const positions = [bbox.x1, bbox.y1];
-        const indices = [];
+        let positions: number[] = [bbox.x1, bbox.y1];
+        let indices: number[] = [];
 
         for (const polygon of polygons) {
           indices.push(START_INDEX);
-          for (const point of polygon) {
+
+          // 单个轮廓顶点数超过最大索引
+          for (let i = 0; i < polygon.length; i++) {
+            const point = polygon[i];
+
+            if (positions.length / 2 >= END_INDEX) {
+              indices.push(END_INDEX);
+
+              parts.push({ positions, indices });
+
+              const last = positions.slice(positions.length - 2);
+
+              positions = [bbox.x1, bbox.y1];
+              indices = [START_INDEX];
+
+              // 为零表示处于两个轮廓之间
+              // 分割轮廓时，复制前一个顶点
+              if (i > 0) {
+                indices.push(positions.length / 2);
+                positions.push(...last);
+              }
+            }
+
             indices.push(positions.length / 2);
             positions.push(point.x, point.y);
           }
+
           indices.push(END_INDEX);
         }
 
