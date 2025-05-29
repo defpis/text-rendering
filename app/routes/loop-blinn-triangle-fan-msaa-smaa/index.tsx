@@ -334,7 +334,7 @@ class PostRenderer {
   }
 }
 
-export default function LoopBlinnTriangleFanMSAA() {
+export default function Page() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

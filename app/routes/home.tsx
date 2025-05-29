@@ -50,9 +50,12 @@ export default function Home() {
               </Link>
             </li>
             <li>
-              <Link to="/loop-blinn-triangle-fan-msaa">
-                Loop-Blinn + Triangle Fan + MSAA
+              <Link to="/loop-blinn-triangle-fan-msaa-smaa">
+                Loop-Blinn + Triangle Fan + MSAA + SMAA
               </Link>
+            </li>
+            <li>
+              <Link to="/gpu-vector-texture">GPU Vector Texture</Link>
             </li>
           </ul>
         </div>

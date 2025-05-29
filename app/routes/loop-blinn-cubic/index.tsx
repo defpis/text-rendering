@@ -15,7 +15,7 @@ import fontURL from "~/assets/fonts/LXGWWenKaiMono-Regular.ttf";
 import { pathToPolygons } from "./pathToPolygons";
 import { polygonToTriangles } from "./polygonToTriangles";
 
-export default function LoopBlinnCubic() {
+export default function Page() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

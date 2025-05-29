@@ -47,7 +47,7 @@ function initProgram(gl: WebGL2RenderingContext, vs: string, fs: string) {
   return program;
 }
 
-export default function LoopBlinnPerfectAntialiasing() {
+export default function Page() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
