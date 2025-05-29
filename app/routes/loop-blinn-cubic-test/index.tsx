@@ -267,7 +267,7 @@ export const determineType = (
   return disc > 0 ? [...d, CurveType.SERPENTINE] : [...d, CurveType.LOOP];
 };
 
-export default function LoopBlinnCubicTest() {
+export default function Page() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

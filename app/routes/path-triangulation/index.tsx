@@ -15,7 +15,7 @@ import fontURL from "~/assets/fonts/LXGWWenKaiMono-Regular.ttf";
 import { pathToPoints } from "./pathToPoints";
 import { pointsToPolygons } from "./pointsToPolygons";
 
-export default function PathTriangulation() {
+export default function Page() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

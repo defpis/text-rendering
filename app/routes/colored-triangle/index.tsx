@@ -11,7 +11,7 @@ import {
   takeUntil,
 } from "rxjs";
 
-export default function ColoredTriangle() {
+export default function Page() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

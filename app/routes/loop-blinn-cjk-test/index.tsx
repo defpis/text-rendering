@@ -16,7 +16,7 @@ import textURL from "~/assets/print-cjk.txt";
 import { pathToPolygons } from "./pathToPolygons";
 import { polygonToTriangles } from "./polygonToTriangles";
 
-export default function LoopBlinnCJKTest() {
+export default function Page() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

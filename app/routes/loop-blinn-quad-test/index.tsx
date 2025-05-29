@@ -12,7 +12,7 @@ import {
   EMPTY,
 } from "rxjs";
 
-export default function LoopBlinnQuadTest() {
+export default function Page() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

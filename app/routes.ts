@@ -43,7 +43,11 @@ export default [
     file: "routes/loop-blinn-perfect-antialiasing/index.tsx",
   },
   {
-    path: "loop-blinn-triangle-fan-msaa",
-    file: "routes/loop-blinn-triangle-fan-msaa/index.tsx",
+    path: "loop-blinn-triangle-fan-msaa-smaa",
+    file: "routes/loop-blinn-triangle-fan-msaa-smaa/index.tsx",
+  },
+  {
+    path: "gpu-vector-texture",
+    file: "routes/gpu-vector-texture/index.tsx",
   },
 ] satisfies RouteConfig;
