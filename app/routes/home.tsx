@@ -18,44 +18,46 @@ export default function Home() {
           </h1>
           <ul className="mt-4 ml-4 list-disc list-inside text-gray-600 dark:text-gray-400">
             <li>
-              <Link to="/colored-triangle">Colored Triangle</Link>
+              <Link to="/colored-triangle">Colored triangle</Link>
             </li>
             <li>
-              <Link to="/colored-cube">Colored Cube</Link>
+              <Link to="/colored-cube">Colored cube</Link>
             </li>
             <li>
-              <Link to="/path-triangulation">Path Triangulation</Link>
+              <Link to="/path-triangulation">Path triangulation</Link>
             </li>
             <li>
-              <Link to="/loop-blinn-quad-test">Loop-Blinn Quadratic Test</Link>
+              <Link to="/loop-blinn-quad-test">Loop-blinn quadratic test</Link>
             </li>
             <li>
-              <Link to="/loop-blinn-quad">Loop-Blinn Quadratic</Link>
+              <Link to="/loop-blinn-quad">Loop-blinn quadratic</Link>
             </li>
             <li>
-              <Link to="/loop-blinn-cubic-test">Loop-Blinn Cubic Test</Link>
+              <Link to="/loop-blinn-cubic-test">Loop-blinn cubic test</Link>
             </li>
             <li>
-              <Link to="/loop-blinn-cubic">Loop-Blinn Cubic</Link>
+              <Link to="/loop-blinn-cubic">Loop-blinn cubic</Link>
             </li>
             <li>
-              <Link to="/loop-blinn-cjk-test">Loop-Blinn CJK Test</Link>
+              <Link to="/loop-blinn-cjk-test">Loop-blinn CJK test</Link>
             </li>
             <li>
-              <Link to="/perfect-antialiasing">Perfect Antialiasing</Link>
+              <Link to="/perfect-antialiasing">Perfect antialiasing</Link>
             </li>
             <li>
               <Link to="/loop-blinn-perfect-antialiasing">
-                Loop-Blinn + Perfect Antialiasing
+                Loop-blinn + perfect antialiasing
               </Link>
             </li>
             <li>
               <Link to="/loop-blinn-triangle-fan-msaa-smaa">
-                Loop-Blinn + Triangle Fan + MSAA + SMAA
+                Loop-blinn + triangle fan + MSAA + SMAA
               </Link>
             </li>
             <li>
-              <Link to="/gpu-vector-texture">GPU Vector Texture</Link>
+              <Link to="/gpu-text-rendering-with-vector-textures">
+                GPU text rendering with vector textures
+              </Link>
             </li>
           </ul>
         </div>

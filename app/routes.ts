@@ -47,7 +47,7 @@ export default [
     file: "routes/loop-blinn-triangle-fan-msaa-smaa/index.tsx",
   },
   {
-    path: "gpu-vector-texture",
-    file: "routes/gpu-vector-texture/index.tsx",
+    path: "gpu-text-rendering-with-vector-textures",
+    file: "routes/gpu-text-rendering-with-vector-textures/index.tsx",
   },
 ] satisfies RouteConfig;
