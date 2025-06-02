@@ -17,12 +17,6 @@ void main() {
   vec3 brg = vec3((t_brg & 1u) + ((t_brg & 16u) >> 4));
   vec2 rg = vec2((t_rg & 1u) + ((t_rg & 16u) >> 4));
 
-  // float a = (brg.x + brg.y + brg.z) / 6.0;
-  // float b = (rg.x + rg.y) / 4.0;
-
-  // o_color = vec4(a - b, 0.0, 0.0, 1.0);
-  // return;
-
   vec3 res = vec3(
     brg.x + brg.y + brg.z, /* R G [B] [R] [G] B R G B */
      rg.y + brg.x + brg.y, /* R G [B] [R] G B R [G] B */

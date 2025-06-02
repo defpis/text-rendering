@@ -338,9 +338,9 @@ export default function Page() {
     <div ref={containerRef} className="min-h-screen relative">
       <canvas></canvas>
       <svg className="absolute start-0 top-0">
-        <circle cx="100" cy="100" r="3" fill="green" />
-        <circle cx="200" cy="200" r="3" fill="orange" />
-        <circle cx="300" cy="100" r="3" fill="green" />
+        <circle cx="100" cy="100" r="3" fill="rgba(0, 255, 0, 1)" />
+        <circle cx="200" cy="200" r="3" fill="rgba(255, 0, 0, 1)" />
+        <circle cx="300" cy="100" r="3" fill="rgba(0, 255, 0, 1)" />
       </svg>
     </div>
   );

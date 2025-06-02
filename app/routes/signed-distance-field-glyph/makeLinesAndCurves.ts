@@ -1,4 +1,4 @@
-import { equals, lerp2, mid2, type Point } from "./utils";
+import { equals, lerp2, type Point } from "./utils";
 
 export interface Curve {
   p1: Point;
@@ -6,7 +6,13 @@ export interface Curve {
   p3: Point;
 }
 
-export const makeCurves = (glyph: opentype.Glyph, flip: boolean) => {
+export interface Line {
+  p1: Point;
+  p2: Point;
+}
+
+export const makeLinesAndCurves = (path: opentype.Path, flip: boolean) => {
+  const lines: Line[] = [];
   const curves: Curve[] = [];
 
   const addCurve = (p1: Point, p2: Point, p3: Point) => {
@@ -17,7 +23,15 @@ export const makeCurves = (glyph: opentype.Glyph, flip: boolean) => {
     }
   };
 
-  const { commands } = glyph.getPath(0, 0, 1);
+  const addLine = (p1: Point, p2: Point) => {
+    if (flip) {
+      lines.push({ p1: p2, p2: p1 });
+    } else {
+      lines.push({ p1, p2 });
+    }
+  };
+
+  const { commands } = path;
 
   let p = { x: 0, y: 0 };
 
@@ -35,9 +49,7 @@ export const makeCurves = (glyph: opentype.Glyph, flip: boolean) => {
           continue;
         }
 
-        const m = mid2(p, n);
-
-        addCurve(p, m, n);
+        addLine(p, n);
 
         p = n;
         break;
@@ -73,5 +85,5 @@ export const makeCurves = (glyph: opentype.Glyph, flip: boolean) => {
     }
   }
 
-  return curves;
+  return { lines, curves };
 };

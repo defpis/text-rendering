@@ -59,6 +59,16 @@ export default function Home() {
                 GPU text rendering with vector textures
               </Link>
             </li>
+            <li>
+              <Link to="/signed-distance-field-test">
+                Signed distance field test
+              </Link>
+            </li>
+            <li>
+              <Link to="/signed-distance-field-glyph">
+                Signed distance field glyph
+              </Link>
+            </li>
           </ul>
         </div>
       </div>

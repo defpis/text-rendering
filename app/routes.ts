@@ -50,4 +50,12 @@ export default [
     path: "gpu-text-rendering-with-vector-textures",
     file: "routes/gpu-text-rendering-with-vector-textures/index.tsx",
   },
+  {
+    path: "signed-distance-field-test",
+    file: "routes/signed-distance-field-test/index.tsx",
+  },
+  {
+    path: "signed-distance-field-glyph",
+    file: "routes/signed-distance-field-glyph/index.tsx",
+  },
 ] satisfies RouteConfig;
