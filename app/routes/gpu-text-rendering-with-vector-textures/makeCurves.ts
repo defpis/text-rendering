@@ -11,9 +11,9 @@ export const makeCurves = (glyph: opentype.Glyph, flip: boolean) => {
 
   const addCurve = (p1: Point, p2: Point, p3: Point) => {
     if (flip) {
-      curves.push({ p1, p2, p3 });
-    } else {
       curves.push({ p1: p3, p2, p3: p1 });
+    } else {
+      curves.push({ p1, p2, p3 });
     }
   };
 

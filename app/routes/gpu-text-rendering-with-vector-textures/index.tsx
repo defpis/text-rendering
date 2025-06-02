@@ -160,7 +160,7 @@ export default function Page() {
       glyphPos.length = 0;
       curvePos.length = 0;
 
-      const flip = fontURL.endsWith(".otf");
+      const flip = fontURL.endsWith(".ttf");
 
       for (const glyph of font.stringToGlyphs(text)) {
         const curves = makeCurves(glyph, flip);
