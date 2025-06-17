@@ -58,4 +58,8 @@ export default [
     path: "signed-distance-field-glyph",
     file: "routes/signed-distance-field-glyph/index.tsx",
   },
+  {
+    path: "signed-distance-field-glyph-test",
+    file: "routes/signed-distance-field-glyph-test/index.tsx",
+  },
 ] satisfies RouteConfig;

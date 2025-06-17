@@ -69,6 +69,11 @@ export default function Home() {
                 Signed distance field glyph
               </Link>
             </li>
+            <li>
+              <Link to="/signed-distance-field-glyph-test">
+                Signed distance field glyph test
+              </Link>
+            </li>
           </ul>
         </div>
       </div>
